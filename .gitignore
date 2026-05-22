@@ -1,0 +1,25 @@
+﻿## Build output
+bin/
+obj/
+TestResults/
+
+## Visual Studio
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+## Rider / ReSharper
+.idea/
+_ReSharper*/
+*.DotSettings.user
+
+## OS files
+Thumbs.db
+Desktop.ini
+
+## App exports
+exports/
+publish/
+.dotnet-cli-home/
