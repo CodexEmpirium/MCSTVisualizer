@@ -1,0 +1,18 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>MCSTVisualizer</AssemblyName>
+    <RootNamespace>MCSTVisualizer</RootNamespace>
+    <Product>MCST Visualizer</Product>
+    <Title>MCST Visualizer</Title>
+    <Description>Interactive Mohr circle and stress tensor visualizer for plane-stress transformations.</Description>
+    <ApplicationIcon>Assets\iconart_desktop2.ico</ApplicationIcon>
+  </PropertyGroup>
+  <ItemGroup>
+    <Content Include="Assets\iconart_desktop2.ico" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

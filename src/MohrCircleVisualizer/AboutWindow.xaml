@@ -1,0 +1,15 @@
+﻿<Window x:Class="MCSTVisualizer.AboutWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="About" Height="310" Width="520"
+        WindowStartupLocation="CenterOwner" ResizeMode="NoResize">
+    <Grid Margin="24">
+        <StackPanel>
+            <TextBlock Text="MCST Visualizer" FontSize="22" FontWeight="SemiBold"/>
+            <TextBlock Margin="0,14,0,0" TextWrapping="Wrap" Text="An interactive Windows desktop tool for transformation of plane stresses using Mohr's circle and a rotatable stress tensor diagram."/>
+            <TextBlock Margin="0,14,0,0" Text="Release build date: May 6, 2026"/>
+            <TextBlock Margin="0,8,0,0" Text="Authors: github.com/CodexEmpirium and ChatGPT Codex"/>
+        </StackPanel>
+    </Grid>
+</Window>
+
