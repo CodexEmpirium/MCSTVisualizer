@@ -31,6 +31,8 @@ public partial class MainWindow : Window
     private const double DragMinimumRadius = 0.000001;
     private const double ThetaSnapToZeroToleranceDegrees = 2.0;
     private const double PsiPerGPa = 145037.73773;
+    private const double MinStressArrowLength = 14.0;
+    private const double MaxStressArrowLength = 58.0;
 
     private readonly CultureInfo _culture = CultureInfo.InvariantCulture;
     private StressState _state = new();
@@ -290,15 +292,27 @@ public partial class MainWindow : Window
 
         Vector ex = new(Math.Cos(angle), Math.Sin(angle));
         Vector ey = new(-Math.Sin(angle), Math.Cos(angle));
-        DrawStressArrow(center + ex * (side / 2 + 8), ex, transformed.SigmaXP, SigmaPrime(_state.Axis1));
-        DrawStressArrow(center - ex * (side / 2 + 8), -ex, transformed.SigmaXP, SigmaPrime(_state.Axis1));
-        DrawStressArrow(center + ey * (side / 2 + 8), ey, transformed.SigmaYP, SigmaPrime(_state.Axis2));
-        DrawStressArrow(center - ey * (side / 2 + 8), -ey, transformed.SigmaYP, SigmaPrime(_state.Axis2));
+        Vector originalEx = ex;
+        Vector originalEy = ey;
+        double maxArrowMagnitude = MaxStressMagnitude(
+            _state.SigmaX,
+            _state.SigmaY,
+            _state.TauXY,
+            _state.SigmaMax,
+            _state.SigmaMin,
+            _state.TauMax);
 
-        DrawShearArrow(center + ey * (side / 2 + 26), ex, transformed.TauXYP);
-        DrawShearArrow(center - ey * (side / 2 + 26), -ex, transformed.TauXYP);
-        DrawShearArrow(center + ex * (side / 2 + 26), -ey, transformed.TauXYP);
-        DrawShearArrow(center - ex * (side / 2 + 26), ey, transformed.TauXYP);
+        DrawStressArrow(center + originalEx * (side / 2), originalEx, _state.SigmaX, Sigma(_state.Axis1), "#8AC7AD", 1.6, 0.8, maxArrowMagnitude);
+        DrawStressArrow(center - originalEx * (side / 2), -originalEx, _state.SigmaX, Sigma(_state.Axis1), "#8AC7AD", 1.6, 0.8, maxArrowMagnitude);
+        DrawStressArrow(center + originalEy * (side / 2), originalEy, _state.SigmaY, Sigma(_state.Axis2), "#95B8D8", 1.6, 0.8, maxArrowMagnitude);
+        DrawStressArrow(center - originalEy * (side / 2), -originalEy, _state.SigmaY, Sigma(_state.Axis2), "#95B8D8", 1.6, 0.8, maxArrowMagnitude);
+        DrawShearArrows(center, side, originalEx, originalEy, _state.TauXY, Tau(_state.Axis1, _state.Axis2), "#E5A48A", 1.6, 0.8, maxArrowMagnitude, 7.0);
+
+        DrawStressArrow(center + ex * (side / 2), ex, transformed.SigmaXP, SigmaPrime(_state.Axis1), "#1B7F5A", 2.2, 1.0, maxArrowMagnitude);
+        DrawStressArrow(center - ex * (side / 2), -ex, transformed.SigmaXP, SigmaPrime(_state.Axis1), "#1B7F5A", 2.2, 1.0, maxArrowMagnitude);
+        DrawStressArrow(center + ey * (side / 2), ey, transformed.SigmaYP, SigmaPrime(_state.Axis2), "#286090", 2.2, 1.0, maxArrowMagnitude);
+        DrawStressArrow(center - ey * (side / 2), -ey, transformed.SigmaYP, SigmaPrime(_state.Axis2), "#286090", 2.2, 1.0, maxArrowMagnitude);
+        DrawShearArrows(center, side, ex, ey, transformed.TauXYP, TauPrime(_state.Axis1, _state.Axis2), "#C2410C", 2.2, 1.0, maxArrowMagnitude, 18.0);
 
         AddText(StressTensorCanvas, $"θ = {Format(_state.PhysicalAngleDegrees)} deg", 18, 14, 13, "#55606D");
         AddText(StressTensorCanvas, $"{SigmaPrime(_state.Axis1)} = {FormatStress(transformed.SigmaXP)} {UnitLabel}", 18, height - 74, 13, "#1B7F5A");
@@ -613,30 +627,65 @@ public partial class MainWindow : Window
         return _mohrDomainMin + (x - 42) * Math.Max(1, _mohrDomainMax - _mohrDomainMin) / Math.Max(1, width - 84);
     }
 
-    private void DrawStressArrow(Point start, Vector direction, double value, string label)
+    private void DrawStressArrow(Point facePoint, Vector outwardNormal, double value, string label, string color, double thickness, double opacity, double maxMagnitude)
     {
-        Vector normal = direction;
+        Vector normal = outwardNormal;
         normal.Normalize();
-        double length = 42;
+        double length = StressArrowLength(value, maxMagnitude);
         Vector signDirection = value >= 0 ? normal : -normal;
-        Point end = start + signDirection * length;
-        AddLine(StressTensorCanvas, start.X, start.Y, end.X, end.Y, value >= 0 ? "#1B7F5A" : "#7B2CBF", 2.0);
-        AddArrowHead(StressTensorCanvas, end, signDirection, value >= 0 ? "#1B7F5A" : "#7B2CBF");
-        AddText(StressTensorCanvas, label, end.X + 4, end.Y + 4, 12, value >= 0 ? "#1B7F5A" : "#7B2CBF");
+        Point start = value >= 0 ? facePoint : facePoint - signDirection * length;
+        Point end = value >= 0 ? facePoint + signDirection * length : facePoint;
+        AddLine(StressTensorCanvas, start.X, start.Y, end.X, end.Y, color, thickness, opacity);
+        AddArrowHead(StressTensorCanvas, end, signDirection, color, opacity);
+        AddText(StressTensorCanvas, label, end.X + 4, end.Y + 4, 12, color, opacity);
     }
 
-    private void DrawShearArrow(Point start, Vector direction, double value)
+    private void DrawShearArrows(Point center, double side, Vector ex, Vector ey, double value, string label, string color, double thickness, double opacity, double maxMagnitude, double gapFromFace)
+    {
+        double faceOffset = side / 2 + gapFromFace;
+        double length = StressArrowLength(value, maxMagnitude);
+        Vector topDirection = value >= 0 ? -ex : ex;
+        Vector bottomDirection = -topDirection;
+        Vector rightDirection = value >= 0 ? ey : -ey;
+        Vector leftDirection = -rightDirection;
+
+        Point topEnd = DrawCenteredShearArrow(center - ey * faceOffset, topDirection, length, color, thickness, opacity);
+        DrawCenteredShearArrow(center + ey * faceOffset, bottomDirection, length, color, thickness, opacity);
+        DrawCenteredShearArrow(center + ex * faceOffset, rightDirection, length, color, thickness, opacity);
+        DrawCenteredShearArrow(center - ex * faceOffset, leftDirection, length, color, thickness, opacity);
+
+        Vector labelDirection = topDirection;
+        labelDirection.Normalize();
+        Point labelPoint = topEnd + labelDirection * 8;
+        AddText(StressTensorCanvas, label, labelPoint.X + 4, labelPoint.Y + 4, 12, color, opacity);
+    }
+
+    private Point DrawCenteredShearArrow(Point midpoint, Vector direction, double length, string color, double thickness, double opacity)
     {
         Vector dir = direction;
         dir.Normalize();
-        if (value < 0)
+        Point start = midpoint - dir * (length / 2.0);
+        Point end = midpoint + dir * (length / 2.0);
+        AddLine(StressTensorCanvas, start.X, start.Y, end.X, end.Y, color, thickness, opacity);
+        AddArrowHead(StressTensorCanvas, end, dir, color, opacity);
+        return end;
+    }
+
+    private static double MaxStressMagnitude(params double[] values)
+    {
+        double maxMagnitude = values.Select(Math.Abs).DefaultIfEmpty(0.0).Max();
+        return Math.Max(DragMinimumRadius, maxMagnitude);
+    }
+
+    private static double StressArrowLength(double value, double maxMagnitude)
+    {
+        if (Math.Abs(value) <= DragMinimumRadius)
         {
-            dir = -dir;
+            return MinStressArrowLength;
         }
 
-        Point end = start + dir * 38;
-        AddLine(StressTensorCanvas, start.X, start.Y, end.X, end.Y, "#C2410C", 2.0);
-        AddArrowHead(StressTensorCanvas, end, dir, "#C2410C");
+        double normalized = Math.Clamp(Math.Abs(value) / Math.Max(DragMinimumRadius, maxMagnitude), 0.0, 1.0);
+        return MinStressArrowLength + normalized * (MaxStressArrowLength - MinStressArrowLength);
     }
 
     private static Point Rotate(Point p, double radians, Point center)
@@ -646,7 +695,7 @@ public partial class MainWindow : Window
         return new Point(center.X + p.X * c - p.Y * s, center.Y + p.X * s + p.Y * c);
     }
 
-    private static void AddLine(Canvas canvas, double x1, double y1, double x2, double y2, string color, double thickness)
+    private static void AddLine(Canvas canvas, double x1, double y1, double x2, double y2, string color, double thickness, double opacity = 1.0)
     {
         canvas.Children.Add(new Line
         {
@@ -654,7 +703,7 @@ public partial class MainWindow : Window
             Y1 = y1,
             X2 = x2,
             Y2 = y2,
-            Stroke = Brush(color),
+            Stroke = Brush(color, opacity),
             StrokeThickness = thickness,
             StrokeStartLineCap = PenLineCap.Round,
             StrokeEndLineCap = PenLineCap.Round
@@ -677,20 +726,20 @@ public partial class MainWindow : Window
         canvas.Children.Add(ellipse);
     }
 
-    private static void AddText(Canvas canvas, string text, double x, double y, double size, string color)
+    private static void AddText(Canvas canvas, string text, double x, double y, double size, string color, double opacity = 1.0)
     {
         TextBlock block = new()
         {
             Text = text,
             FontSize = size,
-            Foreground = Brush(color)
+            Foreground = Brush(color, opacity)
         };
         Canvas.SetLeft(block, x);
         Canvas.SetTop(block, y);
         canvas.Children.Add(block);
     }
 
-    private static void AddArrowHead(Canvas canvas, Point tip, Vector direction, string color)
+    private static void AddArrowHead(Canvas canvas, Point tip, Vector direction, string color, double opacity = 1.0)
     {
         direction.Normalize();
         Vector side = new(-direction.Y, direction.X);
@@ -700,7 +749,7 @@ public partial class MainWindow : Window
         canvas.Children.Add(new Polygon
         {
             Points = new PointCollection([p1, p2, p3]),
-            Fill = Brush(color)
+            Fill = Brush(color, opacity)
         });
     }
 
