@@ -29,7 +29,7 @@ public partial class MainWindow : Window
 
     private const double StressLimit = 1000.0;
     private const double DragMinimumRadius = 0.000001;
-    private const double ThetaSnapToZeroToleranceDegrees = 2.0;
+    private const double AngleSnapToleranceDegrees = 1.0;
     private const double PsiPerGPa = 145037.73773;
 
     private readonly CultureInfo _culture = CultureInfo.InvariantCulture;
@@ -247,13 +247,13 @@ public partial class MainWindow : Window
         AddText(MohrCanvas, Sigma("max"), maxPoint.X + 8, maxPoint.Y + 10, 12, "#1B7F5A");
         AddText(MohrCanvas, Tau("max"), tauPoint.X + 8, tauPoint.Y - 18, 12, "#C2410C");
 
-        double mohrAngle = StressState.Radians(2.0 * _state.PhysicalAngleDegrees);
+        double mohrAngle = StressState.Radians(MohrVisualAngleDegrees(_state.PhysicalAngleDegrees));
         Point anglePoint = new(
             _mohrCenter.X + Math.Cos(mohrAngle) * Math.Max(18, rPixels),
             _mohrCenter.Y - Math.Sin(mohrAngle) * Math.Max(18, rPixels));
         AddLine(MohrCanvas, _mohrCenter.X, _mohrCenter.Y, anglePoint.X, anglePoint.Y, "#E0A106", 2.0);
         AddPoint(MohrCanvas, anglePoint, "#E0A106", "angle");
-        AddText(MohrCanvas, $"2θ = {Format(NormalizeCircleDegrees(2.0 * _state.PhysicalAngleDegrees))} deg", anglePoint.X + 8, anglePoint.Y - 6, 12, "#8A6500");
+        AddText(MohrCanvas, $"2θ = {Format(MohrVisualAngleDegrees(_state.PhysicalAngleDegrees))} deg", anglePoint.X + 8, anglePoint.Y - 6, 12, "#8A6500");
     }
 
     private void DrawStressTensorDiagram()
@@ -268,7 +268,7 @@ public partial class MainWindow : Window
         double height = StressTensorCanvas.ActualHeight;
         Point center = new(width / 2.0, height / 2.0 + 10);
         double side = Math.Min(width, height) * 0.34;
-        double angle = StressState.Radians(_state.PhysicalAngleDegrees);
+        double angle = StressState.Radians(MohrVisualAngleDegrees(_state.PhysicalAngleDegrees));
         var transformed = _state.Transform(_state.PhysicalAngleDegrees);
 
         Point[] corners =
@@ -391,7 +391,8 @@ public partial class MainWindow : Window
         else if (_dragTarget == DragTarget.AngleLine)
         {
             double angle = Math.Atan2(_mohrCenter.Y - p.Y, p.X - _mohrCenter.X);
-            _state.PhysicalAngleDegrees = NormalizeDegrees(StressState.Degrees(angle) / 2.0);
+            double mohrDegrees = SnapToCardinalDegrees(NormalizeCircleDegrees(StressState.Degrees(angle)));
+            _state.PhysicalAngleDegrees = NormalizeDegrees(mohrDegrees / 2.0);
         }
 
         SyncUiFromState();
@@ -404,7 +405,7 @@ public partial class MainWindow : Window
         _dragStartPoint = p;
         _dragStartState = _state.Clone();
         Point center = new(StressTensorCanvas.ActualWidth / 2.0, StressTensorCanvas.ActualHeight / 2.0 + 10);
-        _stressTensorBaseAngle = StressState.Degrees(Math.Atan2(p.Y - center.Y, p.X - center.X)) - _state.PhysicalAngleDegrees;
+        _stressTensorBaseAngle = StressState.Degrees(Math.Atan2(p.Y - center.Y, p.X - center.X)) - MohrVisualAngleDegrees(_state.PhysicalAngleDegrees);
         StressTensorCanvas.CaptureMouse();
     }
 
@@ -417,7 +418,8 @@ public partial class MainWindow : Window
 
         Point p = e.GetPosition(StressTensorCanvas);
         Point center = new(StressTensorCanvas.ActualWidth / 2.0, StressTensorCanvas.ActualHeight / 2.0 + 10);
-        _state.PhysicalAngleDegrees = NormalizeDegrees(StressState.Degrees(Math.Atan2(p.Y - center.Y, p.X - center.X)) - _stressTensorBaseAngle);
+        double visualAngle = SnapToCardinalDegrees(NormalizeCircleDegrees(StressState.Degrees(Math.Atan2(p.Y - center.Y, p.X - center.X)) - _stressTensorBaseAngle));
+        _state.PhysicalAngleDegrees = NormalizeDegrees(visualAngle / 2.0);
         SyncUiFromState();
     }
 
@@ -436,7 +438,7 @@ public partial class MainWindow : Window
 
     private DragTarget HitTestMohr(Point p)
     {
-        double mohrAngle = StressState.Radians(2.0 * _state.PhysicalAngleDegrees);
+        double mohrAngle = StressState.Radians(MohrVisualAngleDegrees(_state.PhysicalAngleDegrees));
         Point anglePoint = new(
             _mohrCenter.X + Math.Cos(mohrAngle) * Math.Max(18, VisualRadiusPixels()),
             _mohrCenter.Y - Math.Sin(mohrAngle) * Math.Max(18, VisualRadiusPixels()));
@@ -635,6 +637,8 @@ public partial class MainWindow : Window
         }
 
         Point end = start + dir * 38;
+        AddLine(StressTensorCanvas, start.X, start.Y, end.X, end.Y, "#C2410C", 6.0, 0.18);
+        AddArrowHead(StressTensorCanvas, end, dir, "#C2410C", 0.18, 14, 6);
         AddLine(StressTensorCanvas, start.X, start.Y, end.X, end.Y, "#C2410C", 2.0);
         AddArrowHead(StressTensorCanvas, end, dir, "#C2410C");
     }
@@ -646,7 +650,7 @@ public partial class MainWindow : Window
         return new Point(center.X + p.X * c - p.Y * s, center.Y + p.X * s + p.Y * c);
     }
 
-    private static void AddLine(Canvas canvas, double x1, double y1, double x2, double y2, string color, double thickness)
+    private static void AddLine(Canvas canvas, double x1, double y1, double x2, double y2, string color, double thickness, double opacity = 1.0)
     {
         canvas.Children.Add(new Line
         {
@@ -654,7 +658,7 @@ public partial class MainWindow : Window
             Y1 = y1,
             X2 = x2,
             Y2 = y2,
-            Stroke = Brush(color),
+            Stroke = Brush(color, opacity),
             StrokeThickness = thickness,
             StrokeStartLineCap = PenLineCap.Round,
             StrokeEndLineCap = PenLineCap.Round
@@ -690,17 +694,17 @@ public partial class MainWindow : Window
         canvas.Children.Add(block);
     }
 
-    private static void AddArrowHead(Canvas canvas, Point tip, Vector direction, string color)
+    private static void AddArrowHead(Canvas canvas, Point tip, Vector direction, string color, double opacity = 1.0, double length = 10.0, double halfWidth = 4.5)
     {
         direction.Normalize();
         Vector side = new(-direction.Y, direction.X);
         Point p1 = tip;
-        Point p2 = tip - direction * 10 + side * 4.5;
-        Point p3 = tip - direction * 10 - side * 4.5;
+        Point p2 = tip - direction * length + side * halfWidth;
+        Point p3 = tip - direction * length - side * halfWidth;
         canvas.Children.Add(new Polygon
         {
             Points = new PointCollection([p1, p2, p3]),
-            Fill = Brush(color)
+            Fill = Brush(color, opacity)
         });
     }
 
@@ -905,12 +909,32 @@ public partial class MainWindow : Window
             degrees += 360.0;
         }
 
-        if (degrees <= ThetaSnapToZeroToleranceDegrees || degrees >= 360.0 - ThetaSnapToZeroToleranceDegrees)
+        if (degrees <= AngleSnapToleranceDegrees || degrees >= 360.0 - AngleSnapToleranceDegrees)
         {
             return 0.0;
         }
 
         return degrees;
+    }
+
+    private static double MohrVisualAngleDegrees(double physicalAngleDegrees)
+    {
+        return NormalizeCircleDegrees(2.0 * physicalAngleDegrees);
+    }
+
+    private static double SnapToCardinalDegrees(double degrees)
+    {
+        double normalized = NormalizeCircleDegrees(degrees);
+        double[] targets = [0.0, 90.0, 180.0, 270.0, 360.0];
+        foreach (double target in targets)
+        {
+            if (Math.Abs(normalized - target) <= AngleSnapToleranceDegrees)
+            {
+                return NormalizeCircleDegrees(target);
+            }
+        }
+
+        return normalized;
     }
 
     private static double NormalizeCircleDegrees(double degrees)
