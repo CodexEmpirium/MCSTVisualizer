@@ -29,7 +29,8 @@ public partial class MainWindow : Window
 
     private const double StressLimit = 1000.0;
     private const double DragMinimumRadius = 0.000001;
-    private const double ThetaSnapToZeroToleranceDegrees = 2.0;
+    private const double ThetaSnapToZeroToleranceDegrees = 1.0;
+    private const double MohrAngleSnapToleranceDegrees = 1.0;
     private const double PsiPerGPa = 145037.73773;
     private const double MinStressArrowLength = 14.0;
     private const double MaxStressArrowLength = 58.0;
@@ -270,7 +271,7 @@ public partial class MainWindow : Window
         double height = StressTensorCanvas.ActualHeight;
         Point center = new(width / 2.0, height / 2.0 + 10);
         double side = Math.Min(width, height) * 0.34;
-        double angle = StressState.Radians(_state.PhysicalAngleDegrees);
+        double angle = StressState.Radians(2.0 * _state.PhysicalAngleDegrees);
         var transformed = _state.Transform(_state.PhysicalAngleDegrees);
 
         Point[] corners =
@@ -306,7 +307,7 @@ public partial class MainWindow : Window
         DrawStressArrow(center - originalEx * (side / 2), -originalEx, _state.SigmaX, Sigma(_state.Axis1), "#8AC7AD", 1.6, 0.8, maxArrowMagnitude);
         DrawStressArrow(center + originalEy * (side / 2), originalEy, _state.SigmaY, Sigma(_state.Axis2), "#95B8D8", 1.6, 0.8, maxArrowMagnitude);
         DrawStressArrow(center - originalEy * (side / 2), -originalEy, _state.SigmaY, Sigma(_state.Axis2), "#95B8D8", 1.6, 0.8, maxArrowMagnitude);
-        DrawShearArrows(center, side, originalEx, originalEy, _state.TauXY, Tau(_state.Axis1, _state.Axis2), "#E5A48A", 1.6, 0.8, maxArrowMagnitude, 7.0);
+        DrawShearArrows(center, side, originalEx, originalEy, _state.TauXY, Tau(_state.Axis1, _state.Axis2), "#E5A48A", 1.6, 0.8, maxArrowMagnitude, 18.0);
 
         DrawStressArrow(center + ex * (side / 2), ex, transformed.SigmaXP, SigmaPrime(_state.Axis1), "#1B7F5A", 2.2, 1.0, maxArrowMagnitude);
         DrawStressArrow(center - ex * (side / 2), -ex, transformed.SigmaXP, SigmaPrime(_state.Axis1), "#1B7F5A", 2.2, 1.0, maxArrowMagnitude);
@@ -405,7 +406,7 @@ public partial class MainWindow : Window
         else if (_dragTarget == DragTarget.AngleLine)
         {
             double angle = Math.Atan2(_mohrCenter.Y - p.Y, p.X - _mohrCenter.X);
-            _state.PhysicalAngleDegrees = NormalizeDegrees(StressState.Degrees(angle) / 2.0);
+            _state.PhysicalAngleDegrees = NormalizeDegrees(SnapMohrCircleAngleDegrees(StressState.Degrees(angle)) / 2.0);
         }
 
         SyncUiFromState();
@@ -418,7 +419,7 @@ public partial class MainWindow : Window
         _dragStartPoint = p;
         _dragStartState = _state.Clone();
         Point center = new(StressTensorCanvas.ActualWidth / 2.0, StressTensorCanvas.ActualHeight / 2.0 + 10);
-        _stressTensorBaseAngle = StressState.Degrees(Math.Atan2(p.Y - center.Y, p.X - center.X)) - _state.PhysicalAngleDegrees;
+        _stressTensorBaseAngle = StressState.Degrees(Math.Atan2(p.Y - center.Y, p.X - center.X)) - (2.0 * _state.PhysicalAngleDegrees);
         StressTensorCanvas.CaptureMouse();
     }
 
@@ -431,7 +432,9 @@ public partial class MainWindow : Window
 
         Point p = e.GetPosition(StressTensorCanvas);
         Point center = new(StressTensorCanvas.ActualWidth / 2.0, StressTensorCanvas.ActualHeight / 2.0 + 10);
-        _state.PhysicalAngleDegrees = NormalizeDegrees(StressState.Degrees(Math.Atan2(p.Y - center.Y, p.X - center.X)) - _stressTensorBaseAngle);
+        double visualAngle = StressState.Degrees(Math.Atan2(p.Y - center.Y, p.X - center.X)) - _stressTensorBaseAngle;
+        visualAngle = SnapMohrCircleAngleDegrees(visualAngle);
+        _state.PhysicalAngleDegrees = NormalizeDegrees(visualAngle / 2.0);
         SyncUiFromState();
     }
 
@@ -960,6 +963,22 @@ public partial class MainWindow : Window
         }
 
         return degrees;
+    }
+
+    private static double SnapMohrCircleAngleDegrees(double degrees)
+    {
+        double normalized = NormalizeCircleDegrees(degrees);
+        double[] snapAngles = [0.0, 90.0, 180.0, 270.0, 360.0];
+
+        foreach (double snapAngle in snapAngles)
+        {
+            if (Math.Abs(normalized - snapAngle) <= MohrAngleSnapToleranceDegrees)
+            {
+                return snapAngle == 360.0 ? 0.0 : snapAngle;
+            }
+        }
+
+        return normalized;
     }
 
     private static double NormalizeCircleDegrees(double degrees)

@@ -1,4 +1,4 @@
-﻿# Mohr Circle and Stress Tensor Visualizer
+﻿# Mohr's Circle and Stress Tensor Visualizer
 
 [AI Disclaimer: vibe-coded project using ChatGPT Codex]
 
