@@ -29,7 +29,7 @@ public partial class MainWindow : Window
 
     private const double StressLimit = 1000.0;
     private const double DragMinimumRadius = 0.000001;
-    private const double ThetaSnapToZeroToleranceDegrees = 1.0;
+    private const double ThetaSnapToZeroToleranceDegrees = 2.0;
     private const double MohrAngleSnapToleranceDegrees = 1.0;
     private const double PsiPerGPa = 145037.73773;
     private const double MinStressArrowLength = 14.0;
@@ -71,7 +71,7 @@ public partial class MainWindow : Window
         SyncUiFromState();
     }
 
-    private void SyncUiFromState()
+    private void SyncUiFromState(bool preserveThetaText = false)
     {
         ClampStressState();
         _isUpdatingUi = true;
@@ -98,12 +98,15 @@ public partial class MainWindow : Window
         SigmaAveBox.Text = FormatStress(_state.SigmaAverage);
         RadiusBox.Text = FormatStress(_state.Radius);
         TauMaxBox.Text = FormatStress(_state.TauMax);
-        ThetaBox.Text = Format(_state.PhysicalAngleDegrees);
+        if (!preserveThetaText)
+        {
+            ThetaBox.Text = FormatAngle(_state.PhysicalAngleDegrees);
+        }
         var transformed = _state.Transform(_state.PhysicalAngleDegrees);
         DerivedText.Text =
             $"{Sigma("max")} = {FormatStress(_state.SigmaMax)} {UnitLabel}\n" +
             $"{Sigma("min")} = {FormatStress(_state.SigmaMin)} {UnitLabel}\n" +
-            $"principal angle = {Format(_state.PrincipalAngleDegrees)} deg\n" +
+            $"principal angle = {FormatAngle(_state.PrincipalAngleDegrees)} deg\n" +
             $"{SigmaPrime(_state.Axis1)} = {FormatStress(transformed.SigmaXP)} {UnitLabel}\n" +
             $"{SigmaPrime(_state.Axis2)} = {FormatStress(transformed.SigmaYP)} {UnitLabel}\n" +
             $"{TauPrime(_state.Axis1, _state.Axis2)} = {FormatStress(transformed.TauXYP)} {UnitLabel}";
@@ -149,7 +152,7 @@ public partial class MainWindow : Window
             _state.PhysicalAngleDegrees = NormalizeDegrees(theta);
         }
 
-        SyncUiFromState();
+        SyncUiFromState(preserveThetaText: sender == ThetaBox);
     }
 
     private void AxisChanged(object sender, SelectionChangedEventArgs e)
@@ -256,7 +259,7 @@ public partial class MainWindow : Window
             _mohrCenter.Y - Math.Sin(mohrAngle) * Math.Max(18, rPixels));
         AddLine(MohrCanvas, _mohrCenter.X, _mohrCenter.Y, anglePoint.X, anglePoint.Y, "#E0A106", 2.0);
         AddPoint(MohrCanvas, anglePoint, "#E0A106", "angle");
-        AddText(MohrCanvas, $"2θ = {Format(NormalizeCircleDegrees(2.0 * _state.PhysicalAngleDegrees))} deg", anglePoint.X + 8, anglePoint.Y - 6, 12, "#8A6500");
+        AddText(MohrCanvas, $"2θ = {FormatAngle(NormalizeCircleDegrees(2.0 * _state.PhysicalAngleDegrees))} deg", anglePoint.X + 8, anglePoint.Y - 6, 12, "#8A6500");
     }
 
     private void DrawStressTensorDiagram()
@@ -315,7 +318,7 @@ public partial class MainWindow : Window
         DrawStressArrow(center - ey * (side / 2), -ey, transformed.SigmaYP, SigmaPrime(_state.Axis2), "#286090", 2.2, 1.0, maxArrowMagnitude);
         DrawShearArrows(center, side, ex, ey, transformed.TauXYP, TauPrime(_state.Axis1, _state.Axis2), "#C2410C", 2.2, 1.0, maxArrowMagnitude, 18.0);
 
-        AddText(StressTensorCanvas, $"θ = {Format(_state.PhysicalAngleDegrees)} deg", 18, 14, 13, "#55606D");
+        AddText(StressTensorCanvas, $"θ = {FormatAngle(_state.PhysicalAngleDegrees)} deg", 18, 14, 13, "#55606D");
         AddText(StressTensorCanvas, $"{SigmaPrime(_state.Axis1)} = {FormatStress(transformed.SigmaXP)} {UnitLabel}", 18, height - 74, 13, "#1B7F5A");
         AddText(StressTensorCanvas, $"{SigmaPrime(_state.Axis2)} = {FormatStress(transformed.SigmaYP)} {UnitLabel}", 18, height - 52, 13, "#286090");
         AddText(StressTensorCanvas, $"{TauPrime(_state.Axis1, _state.Axis2)} = {FormatStress(transformed.TauXYP)} {UnitLabel}", 18, height - 30, 13, "#C2410C");
@@ -406,7 +409,7 @@ public partial class MainWindow : Window
         else if (_dragTarget == DragTarget.AngleLine)
         {
             double angle = Math.Atan2(_mohrCenter.Y - p.Y, p.X - _mohrCenter.X);
-            _state.PhysicalAngleDegrees = NormalizeDegrees(SnapMohrCircleAngleDegrees(StressState.Degrees(angle)) / 2.0);
+            _state.PhysicalAngleDegrees = NormalizeDegreesWithSnap(SnapMohrCircleAngleDegrees(StressState.Degrees(angle)) / 2.0);
         }
 
         SyncUiFromState();
@@ -434,7 +437,7 @@ public partial class MainWindow : Window
         Point center = new(StressTensorCanvas.ActualWidth / 2.0, StressTensorCanvas.ActualHeight / 2.0 + 10);
         double visualAngle = StressState.Degrees(Math.Atan2(p.Y - center.Y, p.X - center.X)) - _stressTensorBaseAngle;
         visualAngle = SnapMohrCircleAngleDegrees(visualAngle);
-        _state.PhysicalAngleDegrees = NormalizeDegrees(visualAngle / 2.0);
+        _state.PhysicalAngleDegrees = NormalizeDegreesWithSnap(visualAngle / 2.0);
         SyncUiFromState();
     }
 
@@ -517,9 +520,12 @@ public partial class MainWindow : Window
 
     private void SaveAs(bool preferCsv = false, bool preferScreenshot = false)
     {
+        string timestamp = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss", CultureInfo.InvariantCulture);
         SaveFileDialog dialog = new()
         {
-            FileName = "MCSTVisualizer",
+            FileName = preferCsv
+                ? $"MCSTVisualizer_CSV_{timestamp}"
+                : $"MCSTVisualizer_Img_{timestamp}",
             Filter = "PNG image (*.png)|*.png|JPEG image (*.jpg;*.jpeg)|*.jpg;*.jpeg|TIFF image (*.tif;*.tiff)|*.tif;*.tiff|CSV parameters (*.csv)|*.csv",
             FilterIndex = preferCsv ? 4 : 1
         };
@@ -816,6 +822,11 @@ public partial class MainWindow : Window
         return value.ToString("G10", _culture);
     }
 
+    private string FormatAngle(double value)
+    {
+        return value.ToString("0.###", _culture);
+    }
+
     private string FormatStress(double valueGPa)
     {
         return ToDisplayUnit(valueGPa).ToString("G10", _culture);
@@ -980,6 +991,12 @@ public partial class MainWindow : Window
             degrees += 360.0;
         }
 
+        return Math.Round(degrees, 3);
+    }
+
+    private static double NormalizeDegreesWithSnap(double degrees)
+    {
+        degrees = NormalizeDegrees(degrees);
         if (degrees <= ThetaSnapToZeroToleranceDegrees || degrees >= 360.0 - ThetaSnapToZeroToleranceDegrees)
         {
             return 0.0;
