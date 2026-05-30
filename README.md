@@ -22,8 +22,8 @@ If this later grows into a cross-platform or browser-based tool, the best altern
 - Rotatable stress tensor diagram with transformed `sigma_x'`, `sigma_y'`, and `tau_x'y'`.
 - File menu with Open, Save, and Save As.
 - Image export as PNG, JPEG/JPG, TIFF.
-- CSV export for human-readable parameters.
-- Settings, About, and placeholder Windows Help integration.
+- CSV export for human-readable parameters with unit labels.
+- Settings, About, and README-based Help integration.
 
 ## Build
 
@@ -38,7 +38,7 @@ The project targets `net10.0-windows`.
 
 ## Notes
 
-- `Help -> Help` attempts to open `Help\MCSTVisualizer.chm`. The placeholder file is not included yet.
+- `Help -> Help` opens this README file.
 - `Edit -> Settings`, `View -> Zoom`, and `View -> Screenshot` are included where requested. Screenshot export is implemented through the menu and the camera button.
 - Saved CSV files can be reopened with `File -> Open`.
 

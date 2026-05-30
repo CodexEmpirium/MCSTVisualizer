@@ -14,5 +14,6 @@
   </PropertyGroup>
   <ItemGroup>
     <Content Include="Assets\iconart_desktop2.ico" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="..\..\README.md" Link="README.md" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

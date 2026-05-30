@@ -547,7 +547,7 @@ public partial class MainWindow : Window
 
     private void SaveCsv(string path)
     {
-        CsvStressFile.Save(path, _state);
+        CsvStressFile.Save(path, _state, UnitLabel, DisplayScale);
         StatusText.Content = $"Saved parameters {System.IO.Path.GetFileName(path)}";
     }
 
@@ -568,20 +568,43 @@ public partial class MainWindow : Window
 
     private void Help_Click(object sender, RoutedEventArgs e)
     {
-        string helpPath = System.IO.Path.Combine(AppContext.BaseDirectory, "Help", "MCSTVisualizer.chm");
-        if (File.Exists(helpPath))
+        string? helpPath = FindReadmePath();
+        if (helpPath is not null)
         {
             Process.Start(new ProcessStartInfo(helpPath) { UseShellExecute = true });
         }
         else
         {
-            MessageBox.Show(this, "The CHM help file has not been added yet.", "Help", MessageBoxButton.OK, MessageBoxImage.Information);
+            MessageBox.Show(this, "README.md could not be found.", "Help", MessageBoxButton.OK, MessageBoxImage.Information);
         }
     }
 
     private void About_Click(object sender, RoutedEventArgs e)
     {
         new AboutWindow { Owner = this }.ShowDialog();
+    }
+
+    private static string? FindReadmePath()
+    {
+        string outputReadme = System.IO.Path.Combine(AppContext.BaseDirectory, "README.md");
+        if (File.Exists(outputReadme))
+        {
+            return outputReadme;
+        }
+
+        DirectoryInfo? directory = new(AppContext.BaseDirectory);
+        while (directory is not null)
+        {
+            string candidate = System.IO.Path.Combine(directory.FullName, "README.md");
+            if (File.Exists(candidate))
+            {
+                return candidate;
+            }
+
+            directory = directory.Parent;
+        }
+
+        return null;
     }
 
     private Point StressPoint(double sigma, double tau)
