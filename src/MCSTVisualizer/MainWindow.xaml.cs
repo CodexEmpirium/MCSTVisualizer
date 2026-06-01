@@ -155,6 +155,25 @@ public partial class MainWindow : Window
         SyncUiFromState(preserveThetaText: sender == ThetaBox);
     }
 
+    private void TextBox_GotKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
+    {
+        if (sender is TextBox textBox)
+        {
+            textBox.SelectAll();
+        }
+    }
+
+    private void TextBox_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is not TextBox textBox || textBox.IsKeyboardFocusWithin)
+        {
+            return;
+        }
+
+        e.Handled = true;
+        textBox.Focus();
+    }
+
     private void AxisChanged(object sender, SelectionChangedEventArgs e)
     {
         UpdateAxesFromBoxes();

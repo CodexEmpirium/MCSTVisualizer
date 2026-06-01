@@ -27,14 +27,14 @@ If this later grows into a cross-platform or browser-based tool, the best altern
 
 ## Build
 
-Install the .NET Desktop SDK for Windows, then run:
+Install the .NET Desktop SDK for Windows, then run this from the repo root:
 
 ```powershell
 dotnet build .\MCSTVisualizer.sln
 dotnet run --project .\src\MCSTVisualizer\MCSTVisualizer.csproj
 ```
 
-The project targets `net10.0-windows`.
+The executable can be run from `MCSTVisualizer\bin\Release\win-x64\net10.0-windows`.
 
 ## Notes
 

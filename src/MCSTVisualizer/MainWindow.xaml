@@ -4,6 +4,14 @@
         Title="MCST Visualizer" Height="900" Width="1360"
         MinHeight="760" MinWidth="1080" WindowStartupLocation="CenterScreen"
         Loaded="Window_Loaded">
+    <Window.Resources>
+        <Style TargetType="TextBox">
+            <Setter Property="MinHeight" Value="22"/>
+            <Setter Property="Padding" Value="2,1"/>
+            <EventSetter Event="GotKeyboardFocus" Handler="TextBox_GotKeyboardFocus"/>
+            <EventSetter Event="PreviewMouseLeftButtonDown" Handler="TextBox_PreviewMouseLeftButtonDown"/>
+        </Style>
+    </Window.Resources>
     <DockPanel x:Name="RootVisual" Background="#F4F6F9">
         <Menu DockPanel.Dock="Top">
             <MenuItem Header="_File">
@@ -29,7 +37,7 @@
         <ToolBar DockPanel.Dock="Top" Padding="6">
             <Button ToolTip="Save screenshot" Click="Screenshot_Click">
                 <StackPanel Orientation="Horizontal">
-                    <Canvas Width="24" Height="18" Margin="0,0,8,0">
+                    <Canvas Width="24" Height="18" Margin="0,0,8,0" IsHitTestVisible="False" SnapsToDevicePixels="True">
                         <Rectangle Width="18" Height="13" Canvas.Left="3" Canvas.Top="4" Stroke="#243143" StrokeThickness="1.6" Fill="#FFFFFF" RadiusX="2" RadiusY="2"/>
                         <Rectangle Width="7" Height="3" Canvas.Left="7" Canvas.Top="1" Stroke="#243143" StrokeThickness="1.4" Fill="#FFFFFF"/>
                         <Ellipse Width="6" Height="6" Canvas.Left="9" Canvas.Top="7" Stroke="#243143" StrokeThickness="1.4" Fill="#DDE7F8"/>
@@ -40,7 +48,7 @@
             </Button>
             <Button ToolTip="Save parameters as CSV" Click="SaveCsv_Click">
                 <StackPanel Orientation="Horizontal">
-                    <Canvas Width="24" Height="20" Margin="0,0,8,0">
+                    <Canvas Width="24" Height="20" Margin="0,0,8,0" IsHitTestVisible="False" SnapsToDevicePixels="True">
                         <Rectangle Width="15" Height="17" Canvas.Left="2" Canvas.Top="1" Stroke="#243143" StrokeThickness="1.4" Fill="#FFFFFF" RadiusX="1.5" RadiusY="1.5"/>
                         <Line X1="5" Y1="5" X2="14" Y2="5" Stroke="#96A0AD" StrokeThickness="1"/>
                         <Line X1="5" Y1="8" X2="14" Y2="8" Stroke="#96A0AD" StrokeThickness="1"/>
