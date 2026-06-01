@@ -27,14 +27,16 @@ If this later grows into a cross-platform or browser-based tool, the best altern
 
 ## Build
 
-Install the .NET Desktop SDK for Windows, then run this from the repo root:
+# Developers:
+Install the .NET Desktop SDK for Windows, then run these from the repo root:
 
 ```powershell
-dotnet build .\MCSTVisualizer.sln
+dotnet build .\MCSTVisualizer.sln [-c Release]
 dotnet run --project .\src\MCSTVisualizer\MCSTVisualizer.csproj
 ```
 
-The executable can be run from `MCSTVisualizer\bin\Release\win-x64\net10.0-windows`.
+# Users:
+The ready-made executable can already be run from `src\MCSTVisualizer\bin\Release\net10.0-windows\win-x64`.
 
 ## Notes
 
@@ -42,11 +44,14 @@ The executable can be run from `MCSTVisualizer\bin\Release\win-x64\net10.0-windo
 - `Edit -> Settings`, `View -> Zoom`, and `View -> Screenshot` are included where requested. Screenshot export is implemented through the menu and the camera button.
 - Saved CSV files can be reopened with `File -> Open`.
 
-## Suggested Future Improvements
+## Implemented Features
 
 - Add stress invariants and optional strain transformation mode.
 - Add a polar grid and snap-to-angle increments on Mohr's circle.
 - Add units support with MPa/ksi/psi presets.
+
+## Suggested Future Improvements
+
 - Add a print-ready engineering report export.
 - Add examples for common loading cases.
 - Add automated tests for stress-transformation formulas.
