@@ -5,6 +5,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Media3D;
 using System.Windows.Shapes;
 using Microsoft.Win32;
 using MCSTVisualizer.Models;
@@ -27,6 +28,14 @@ public partial class MainWindow : Window
         StressTensorDiagram
     }
 
+    private enum RotationArc
+    {
+        None,
+        X,
+        Y,
+        Z
+    }
+
     private const double StressLimit = 1000.0;
     private const double DragMinimumRadius = 0.000001;
     private const double ThetaSnapToZeroToleranceDegrees = 2.0;
@@ -37,6 +46,7 @@ public partial class MainWindow : Window
 
     private readonly CultureInfo _culture = CultureInfo.InvariantCulture;
     private StressState _state = new();
+    private StressState3D _state3D = new();
     private StressDisplayUnit _displayUnit = StressDisplayUnit.MPa;
     private bool _isUpdatingUi = true;
     private DragTarget _dragTarget = DragTarget.None;
@@ -50,6 +60,7 @@ public partial class MainWindow : Window
     private double _stressTensorBaseAngle;
     private Point _dragStartPoint;
     private StressState _dragStartState = new();
+    private RotationArc _dragRotationArc = RotationArc.None;
 
     private enum StressDisplayUnit
     {
@@ -85,6 +96,10 @@ public partial class MainWindow : Window
             StressDisplayUnit.GPa => 4,
             _ => 0
         };
+        if (Stress3DUnitBox is not null)
+        {
+            Stress3DUnitBox.SelectedIndex = StressUnitBox.SelectedIndex;
+        }
         StressValuesHeader.Text = $"Stress Values ({UnitLabel})";
         SigmaXLabel.Text = $"{Sigma(_state.Axis1)} ({UnitLabel})";
         SigmaYLabel.Text = $"{Sigma(_state.Axis2)} ({UnitLabel})";
@@ -114,6 +129,41 @@ public partial class MainWindow : Window
 
         DrawMohrCircle();
         DrawStressTensorDiagram();
+        Sync3DUiFromState();
+    }
+
+    private void Sync3DUiFromState()
+    {
+        if (Stress3DValuesHeader is null)
+        {
+            return;
+        }
+
+        _isUpdatingUi = true;
+        Stress3DValuesHeader.Text = $"3D Stress Tensor ({UnitLabel})";
+        Sigma3DXLabel.Text = $"{Sigma("x")} ({UnitLabel})";
+        Sigma3DYLabel.Text = $"{Sigma("y")} ({UnitLabel})";
+        Sigma3DZLabel.Text = $"{Sigma("z")} ({UnitLabel})";
+        Tau3DXYLabel.Text = $"{Tau("xy")} ({UnitLabel})";
+        Tau3DYZLabel.Text = $"{Tau("yz")} ({UnitLabel})";
+        Tau3DZXLabel.Text = $"{Tau("zx")} ({UnitLabel})";
+        Sigma3DXBox.Text = FormatStress(_state3D.SigmaX);
+        Sigma3DYBox.Text = FormatStress(_state3D.SigmaY);
+        Sigma3DZBox.Text = FormatStress(_state3D.SigmaZ);
+        Tau3DXYBox.Text = FormatStress(_state3D.TauXY);
+        Tau3DYZBox.Text = FormatStress(_state3D.TauYZ);
+        Tau3DZXBox.Text = FormatStress(_state3D.TauZX);
+
+        double[] principal = _state3D.PrincipalStresses();
+        Derived3DText.Text =
+            $"{Sigma("1")} = {FormatStress(principal[0])} {UnitLabel}\n" +
+            $"{Sigma("2")} = {FormatStress(principal[1])} {UnitLabel}\n" +
+            $"{Sigma("3")} = {FormatStress(principal[2])} {UnitLabel}\n" +
+            $"{Tau("max")} = {FormatStress((principal[0] - principal[2]) / 2.0)} {UnitLabel}\n" +
+            $"{Sigma("mean")} = {FormatStress(_state3D.MeanStress)} {UnitLabel}";
+        _isUpdatingUi = false;
+
+        Draw3DViews();
     }
 
     private void ValueBox_TextChanged(object sender, TextChangedEventArgs e)
@@ -186,14 +236,66 @@ public partial class MainWindow : Window
 
     private void StressUnitBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (_isUpdatingUi || StressUnitBox is null)
+        if (_isUpdatingUi || StressUnitBox is null || Stress3DUnitBox is null)
         {
             return;
         }
 
-        string? selectedUnit = (StressUnitBox.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? StressUnitBox.Text;
+        ComboBox source = sender == Stress3DUnitBox ? Stress3DUnitBox : StressUnitBox;
+        string? selectedUnit = (source.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? source.Text;
         _displayUnit = ParseDisplayUnit(selectedUnit);
         SyncUiFromState();
+    }
+
+    private void Value3DBox_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (_isUpdatingUi)
+        {
+            return;
+        }
+
+        if (!TryRead(Sigma3DXBox, out double sigmaX) ||
+            !TryRead(Sigma3DYBox, out double sigmaY) ||
+            !TryRead(Sigma3DZBox, out double sigmaZ) ||
+            !TryRead(Tau3DXYBox, out double tauXY) ||
+            !TryRead(Tau3DYZBox, out double tauYZ) ||
+            !TryRead(Tau3DZXBox, out double tauZX))
+        {
+            return;
+        }
+
+        _state3D.SigmaX = ClampStress(FromDisplayUnit(sigmaX));
+        _state3D.SigmaY = ClampStress(FromDisplayUnit(sigmaY));
+        _state3D.SigmaZ = ClampStress(FromDisplayUnit(sigmaZ));
+        _state3D.TauXY = ClampStress(FromDisplayUnit(tauXY));
+        _state3D.TauYZ = ClampStress(FromDisplayUnit(tauYZ));
+        _state3D.TauZX = ClampStress(FromDisplayUnit(tauZX));
+        Sync3DUiFromState();
+    }
+
+    private void Rotation3D_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (_isUpdatingUi || RotationXText is null)
+        {
+            return;
+        }
+
+        RotationXText.Text = $"X: {FormatAngle(RotationXSlider.Value)} deg";
+        RotationYText.Text = $"Y: {FormatAngle(RotationYSlider.Value)} deg";
+        RotationZText.Text = $"Z: {FormatAngle(RotationZSlider.Value)} deg";
+        Draw3DViews();
+    }
+
+    private void MainTabs_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (!IsLoaded)
+        {
+            return;
+        }
+
+        DrawMohrCircle();
+        DrawStressTensorDiagram();
+        Draw3DViews();
     }
 
     private void UpdateAxesFromBoxes()
@@ -210,7 +312,7 @@ public partial class MainWindow : Window
 
     private void DrawMohrCircle()
     {
-        if (MohrCanvas.ActualWidth <= 20 || MohrCanvas.ActualHeight <= 20)
+        if (MohrCanvas is null || MohrCanvas.ActualWidth <= 20 || MohrCanvas.ActualHeight <= 20)
         {
             return;
         }
@@ -283,7 +385,7 @@ public partial class MainWindow : Window
 
     private void DrawStressTensorDiagram()
     {
-        if (StressTensorCanvas.ActualWidth <= 20 || StressTensorCanvas.ActualHeight <= 20)
+        if (StressTensorCanvas is null || StressTensorCanvas.ActualWidth <= 20 || StressTensorCanvas.ActualHeight <= 20)
         {
             return;
         }
@@ -341,6 +443,291 @@ public partial class MainWindow : Window
         AddText(StressTensorCanvas, $"{SigmaPrime(_state.Axis1)} = {FormatStress(transformed.SigmaXP)} {UnitLabel}", 18, height - 74, 13, "#1B7F5A");
         AddText(StressTensorCanvas, $"{SigmaPrime(_state.Axis2)} = {FormatStress(transformed.SigmaYP)} {UnitLabel}", 18, height - 52, 13, "#286090");
         AddText(StressTensorCanvas, $"{TauPrime(_state.Axis1, _state.Axis2)} = {FormatStress(transformed.TauXYP)} {UnitLabel}", 18, height - 30, 13, "#C2410C");
+    }
+
+    private void Draw3DViews()
+    {
+        DrawStressTensor3D();
+        DrawMohrSphere();
+    }
+
+    private void DrawStressTensor3D()
+    {
+        if (StressTensor3DCanvas is null || StressTensor3DCanvas.ActualWidth <= 20 || StressTensor3DCanvas.ActualHeight <= 20)
+        {
+            return;
+        }
+
+        StressTensor3DCanvas.Children.Clear();
+        double width = StressTensor3DCanvas.ActualWidth;
+        double height = StressTensor3DCanvas.ActualHeight;
+        Point center = new(width / 2.0, height / 2.0 + 10);
+        double side = Math.Min(width, height) * 0.42;
+        double half = side / 2.0;
+        double scale = side;
+
+        Point3D[] vertices =
+        [
+            new(-0.5, -0.5, -0.5),
+            new(0.5, -0.5, -0.5),
+            new(0.5, 0.5, -0.5),
+            new(-0.5, 0.5, -0.5),
+            new(-0.5, -0.5, 0.5),
+            new(0.5, -0.5, 0.5),
+            new(0.5, 0.5, 0.5),
+            new(-0.5, 0.5, 0.5)
+        ];
+        int[][] faces =
+        [
+            [0, 1, 2, 3],
+            [4, 5, 6, 7],
+            [0, 1, 5, 4],
+            [1, 2, 6, 5],
+            [2, 3, 7, 6],
+            [3, 0, 4, 7]
+        ];
+
+        foreach (int[] face in faces.OrderBy(f => f.Average(index => Rotate3D(vertices[index]).Z)))
+        {
+            Polygon polygon = new()
+            {
+                Points = new PointCollection(face.Select(index => Project3D(vertices[index], center, scale))),
+                Fill = Brush("#F7FBFF", 0.76),
+                Stroke = Brush("#243143", 0.72),
+                StrokeThickness = 1.4
+            };
+            StressTensor3DCanvas.Children.Add(polygon);
+        }
+
+        DrawProjectedAxis(StressTensor3DCanvas, center, scale * 0.68, new Vector3D(1, 0, 0), "X", "#7B2CBF");
+        DrawProjectedAxis(StressTensor3DCanvas, center, scale * 0.68, new Vector3D(0, 1, 0), "Y", "#1B7F5A");
+        DrawProjectedAxis(StressTensor3DCanvas, center, scale * 0.68, new Vector3D(0, 0, 1), "Z", "#286090");
+
+        double maxMagnitude = MaxStressMagnitude(
+            _state3D.SigmaX,
+            _state3D.SigmaY,
+            _state3D.SigmaZ,
+            _state3D.TauXY,
+            _state3D.TauYZ,
+            _state3D.TauZX);
+
+        DrawTractionArrow(new Vector3D(1, 0, 0), Sigma("x"), "#7B2CBF", center, half, maxMagnitude);
+        DrawTractionArrow(new Vector3D(-1, 0, 0), Sigma("x"), "#7B2CBF", center, half, maxMagnitude);
+        DrawTractionArrow(new Vector3D(0, 1, 0), Sigma("y"), "#1B7F5A", center, half, maxMagnitude);
+        DrawTractionArrow(new Vector3D(0, -1, 0), Sigma("y"), "#1B7F5A", center, half, maxMagnitude);
+        DrawTractionArrow(new Vector3D(0, 0, 1), Sigma("z"), "#286090", center, half, maxMagnitude);
+        DrawTractionArrow(new Vector3D(0, 0, -1), Sigma("z"), "#286090", center, half, maxMagnitude);
+
+        AddText(StressTensor3DCanvas, TensorMatrixText(), 18, 16, 12, "#55606D");
+        DrawRotationArcs(center, Math.Min(width, height) * 0.43);
+    }
+
+    private void DrawRotationArcs(Point center, double radius)
+    {
+        DrawRotationArc(RotationArc.X, center, radius, -45.0, RotationXSlider.Value, "#7B2CBF");
+        DrawRotationArc(RotationArc.Y, center, radius, -135.0, RotationYSlider.Value, "#1B7F5A");
+        DrawRotationArc(RotationArc.Z, center, radius, 90.0, RotationZSlider.Value, "#286090");
+    }
+
+    private void DrawRotationArc(RotationArc arc, Point center, double radius, double centerAngleDegrees, double valueDegrees, string color)
+    {
+        const double span = 120.0;
+        const double segmentGap = 4.0;
+        const double thickness = 10.0;
+        double startAngle = centerAngleDegrees - span / 2.0;
+        double progress = Math.Clamp((valueDegrees + 180.0) / 360.0, 0.0, 1.0);
+        double activeEnd = startAngle + progress * span;
+
+        for (int segment = 0; segment < 3; segment++)
+        {
+            double segmentStart = startAngle + segment * span / 3.0 + segmentGap / 2.0;
+            double segmentEnd = startAngle + (segment + 1) * span / 3.0 - segmentGap / 2.0;
+            DrawArcSegment(StressTensor3DCanvas, center, radius, segmentStart, segmentEnd, "#D5DCE7", thickness, 0.95);
+            if (activeEnd > segmentStart)
+            {
+                DrawArcSegment(StressTensor3DCanvas, center, radius, segmentStart, Math.Min(activeEnd, segmentEnd), color, thickness, 0.96);
+            }
+        }
+
+        Point handle = PointOnArc(center, radius, activeEnd);
+        Ellipse knob = new()
+        {
+            Width = 18,
+            Height = 18,
+            Fill = Brush("#FFFFFF"),
+            Stroke = Brush(color),
+            StrokeThickness = 3.0,
+            ToolTip = $"Rotate about {arc}: {FormatAngle(valueDegrees)} deg"
+        };
+        Canvas.SetLeft(knob, handle.X - 9);
+        Canvas.SetTop(knob, handle.Y - 9);
+        StressTensor3DCanvas.Children.Add(knob);
+
+        Point labelPoint = PointOnArc(center, radius + 20, centerAngleDegrees);
+        AddText(StressTensor3DCanvas, $"{arc} {FormatAngle(valueDegrees)} deg", labelPoint.X - 28, labelPoint.Y - 9, 12, color);
+    }
+
+    private static void DrawArcSegment(Canvas canvas, Point center, double radius, double startAngleDegrees, double endAngleDegrees, string color, double thickness, double opacity)
+    {
+        if (endAngleDegrees <= startAngleDegrees)
+        {
+            return;
+        }
+
+        Polyline line = new()
+        {
+            Stroke = Brush(color, opacity),
+            StrokeThickness = thickness,
+            StrokeStartLineCap = PenLineCap.Round,
+            StrokeEndLineCap = PenLineCap.Round
+        };
+
+        int steps = Math.Max(4, (int)Math.Ceiling((endAngleDegrees - startAngleDegrees) / 3.0));
+        for (int i = 0; i <= steps; i++)
+        {
+            double angle = startAngleDegrees + (endAngleDegrees - startAngleDegrees) * i / steps;
+            line.Points.Add(PointOnArc(center, radius, angle));
+        }
+
+        canvas.Children.Add(line);
+    }
+
+    private static Point PointOnArc(Point center, double radius, double angleDegrees)
+    {
+        double radians = StressState.Radians(angleDegrees);
+        return new Point(center.X + Math.Cos(radians) * radius, center.Y + Math.Sin(radians) * radius);
+    }
+
+    private void DrawMohrSphere()
+    {
+        if (MohrSphereCanvas is null || MohrSphereCanvas.ActualWidth <= 20 || MohrSphereCanvas.ActualHeight <= 20)
+        {
+            return;
+        }
+
+        MohrSphereCanvas.Children.Clear();
+        double width = MohrSphereCanvas.ActualWidth;
+        double height = MohrSphereCanvas.ActualHeight;
+        Point center = new(width / 2.0, height / 2.0 + 8);
+        double radius = Math.Min(width, height) * 0.31;
+        double[] principal = _state3D.PrincipalStresses();
+
+        DrawSphereCircle(MohrSphereCanvas, center, radius, 0, "#A7B4C5", 0.42);
+        DrawSphereCircle(MohrSphereCanvas, center, radius, 1, "#A7B4C5", 0.42);
+        DrawSphereCircle(MohrSphereCanvas, center, radius, 2, "#A7B4C5", 0.42);
+        DrawSphereCircle(MohrSphereCanvas, center, radius * 0.68, 0, "#7B2CBF", 0.72);
+        DrawSphereCircle(MohrSphereCanvas, center, radius * 0.68, 1, "#1B7F5A", 0.72);
+        DrawSphereCircle(MohrSphereCanvas, center, radius * 0.68, 2, "#286090", 0.72);
+
+        DrawProjectedAxis(MohrSphereCanvas, center, radius * 1.25, new Vector3D(1, 0, 0), Sigma("1"), "#7B2CBF");
+        DrawProjectedAxis(MohrSphereCanvas, center, radius * 1.25, new Vector3D(0, 1, 0), Sigma("2"), "#1B7F5A");
+        DrawProjectedAxis(MohrSphereCanvas, center, radius * 1.25, new Vector3D(0, 0, 1), Sigma("3"), "#286090");
+
+        AddText(MohrSphereCanvas, $"{Sigma("1")} = {FormatStress(principal[0])} {UnitLabel}", 18, 18, 13, "#7B2CBF");
+        AddText(MohrSphereCanvas, $"{Sigma("2")} = {FormatStress(principal[1])} {UnitLabel}", 18, 40, 13, "#1B7F5A");
+        AddText(MohrSphereCanvas, $"{Sigma("3")} = {FormatStress(principal[2])} {UnitLabel}", 18, 62, 13, "#286090");
+        AddText(MohrSphereCanvas, $"{Tau("13")} = {FormatStress((principal[0] - principal[2]) / 2.0)} {UnitLabel}", 18, height - 32, 13, "#C2410C");
+    }
+
+    private void DrawTractionArrow(Vector3D normal, string label, string color, Point center, double halfSide, double maxMagnitude)
+    {
+        Vector3D traction = TensorMultiply(normal);
+        double magnitude = traction.Length;
+        if (magnitude <= DragMinimumRadius)
+        {
+            traction = normal;
+            magnitude = DragMinimumRadius;
+        }
+
+        traction.Normalize();
+        double length = (0.16 + 0.22 * Math.Clamp(magnitude / maxMagnitude, 0.0, 1.0));
+        Point3D start3D = new(normal.X * 0.5, normal.Y * 0.5, normal.Z * 0.5);
+        Point3D end3D = start3D + traction * length;
+        Point start = Project3D(start3D, center, halfSide * 2.0);
+        Point end = Project3D(end3D, center, halfSide * 2.0);
+        AddLine(StressTensor3DCanvas, start.X, start.Y, end.X, end.Y, color, 2.0);
+        AddArrowHead(StressTensor3DCanvas, end, end - start, color);
+        AddText(StressTensor3DCanvas, label, end.X + 5, end.Y + 4, 12, color);
+    }
+
+    private void DrawProjectedAxis(Canvas canvas, Point center, double length, Vector3D axis, string label, string color)
+    {
+        Point origin = Project3D(new Point3D(0, 0, 0), center, length);
+        Point tip = Project3D(new Point3D(axis.X, axis.Y, axis.Z), center, length);
+        AddLine(canvas, origin.X, origin.Y, tip.X, tip.Y, color, 1.8);
+        AddArrowHead(canvas, tip, tip - origin, color);
+        AddText(canvas, label, tip.X + 6, tip.Y + 2, 13, color);
+    }
+
+    private void DrawSphereCircle(Canvas canvas, Point center, double radius, int plane, string color, double opacity)
+    {
+        Polyline line = new()
+        {
+            Stroke = Brush(color, opacity),
+            StrokeThickness = 1.8
+        };
+
+        for (int i = 0; i <= 96; i++)
+        {
+            double angle = i * 2.0 * Math.PI / 96.0;
+            double c = Math.Cos(angle);
+            double s = Math.Sin(angle);
+            Point3D point = plane switch
+            {
+                0 => new Point3D(0, c, s),
+                1 => new Point3D(c, 0, s),
+                _ => new Point3D(c, s, 0)
+            };
+            line.Points.Add(Project3D(point, center, radius));
+        }
+
+        canvas.Children.Add(line);
+    }
+
+    private Point Project3D(Point3D point, Point center, double scale)
+    {
+        Point3D rotated = Rotate3D(point);
+        double x = (-0.8660254037844386 * rotated.X + 0.8660254037844386 * rotated.Y) * scale;
+        double y = (0.5 * rotated.X + 0.5 * rotated.Y - rotated.Z) * scale;
+        return new Point(center.X + x, center.Y + y);
+    }
+
+    private Point3D Rotate3D(Point3D point)
+    {
+        double rx = StressState.Radians(RotationXSlider?.Value ?? 0.0);
+        double ry = StressState.Radians(RotationYSlider?.Value ?? 0.0);
+        double rz = StressState.Radians(RotationZSlider?.Value ?? 0.0);
+        double cx = Math.Cos(rx);
+        double sx = Math.Sin(rx);
+        double cy = Math.Cos(ry);
+        double sy = Math.Sin(ry);
+        double cz = Math.Cos(rz);
+        double sz = Math.Sin(rz);
+
+        double x = point.X;
+        double y = point.Y * cx - point.Z * sx;
+        double z = point.Y * sx + point.Z * cx;
+        double x2 = x * cy + z * sy;
+        double z2 = -x * sy + z * cy;
+        double x3 = x2 * cz - y * sz;
+        double y3 = x2 * sz + y * cz;
+        return new Point3D(x3, y3, z2);
+    }
+
+    private Vector3D TensorMultiply(Vector3D vector)
+    {
+        double[,] matrix = _state3D.Matrix;
+        return new Vector3D(
+            matrix[0, 0] * vector.X + matrix[0, 1] * vector.Y + matrix[0, 2] * vector.Z,
+            matrix[1, 0] * vector.X + matrix[1, 1] * vector.Y + matrix[1, 2] * vector.Z,
+            matrix[2, 0] * vector.X + matrix[2, 1] * vector.Y + matrix[2, 2] * vector.Z);
+    }
+
+    private string TensorMatrixText()
+    {
+        return $"[{FormatStress(_state3D.SigmaX)}, {FormatStress(_state3D.TauXY)}, {FormatStress(_state3D.TauZX)}]\n" +
+               $"[{FormatStress(_state3D.TauXY)}, {FormatStress(_state3D.SigmaY)}, {FormatStress(_state3D.TauYZ)}]\n" +
+               $"[{FormatStress(_state3D.TauZX)}, {FormatStress(_state3D.TauYZ)}, {FormatStress(_state3D.SigmaZ)}] {UnitLabel}";
     }
 
     private void MohrCanvas_MouseDown(object sender, MouseButtonEventArgs e)
@@ -460,6 +847,106 @@ public partial class MainWindow : Window
         SyncUiFromState();
     }
 
+    private void StressTensor3DCanvas_MouseDown(object sender, MouseButtonEventArgs e)
+    {
+        Point p = e.GetPosition(StressTensor3DCanvas);
+        _dragRotationArc = HitTestRotationArc(p);
+        if (_dragRotationArc == RotationArc.None)
+        {
+            return;
+        }
+
+        UpdateRotationFromArcPoint(_dragRotationArc, p);
+        StressTensor3DCanvas.CaptureMouse();
+        e.Handled = true;
+    }
+
+    private void StressTensor3DCanvas_MouseMove(object sender, MouseEventArgs e)
+    {
+        if (_dragRotationArc == RotationArc.None || e.LeftButton != MouseButtonState.Pressed)
+        {
+            return;
+        }
+
+        UpdateRotationFromArcPoint(_dragRotationArc, e.GetPosition(StressTensor3DCanvas));
+        e.Handled = true;
+    }
+
+    private void StressTensor3DCanvas_MouseUp(object sender, MouseButtonEventArgs e)
+    {
+        _dragRotationArc = RotationArc.None;
+        StressTensor3DCanvas.ReleaseMouseCapture();
+    }
+
+    private RotationArc HitTestRotationArc(Point point)
+    {
+        if (StressTensor3DCanvas is null)
+        {
+            return RotationArc.None;
+        }
+
+        Point center = RotationArcCenter();
+        double radius = RotationArcRadius();
+        foreach (RotationArc arc in new[] { RotationArc.X, RotationArc.Y, RotationArc.Z })
+        {
+            double radialDistance = Math.Abs(Distance(point, center) - radius);
+            if (radialDistance <= 20.0 && RotationArcProgress(arc, point, center) is >= 0.0 and <= 1.0)
+            {
+                return arc;
+            }
+        }
+
+        return RotationArc.None;
+    }
+
+    private void UpdateRotationFromArcPoint(RotationArc arc, Point point)
+    {
+        double progress = Math.Clamp(RotationArcProgress(arc, point, RotationArcCenter()), 0.0, 1.0);
+        double value = progress * 360.0 - 180.0;
+        switch (arc)
+        {
+            case RotationArc.X:
+                RotationXSlider.Value = value;
+                break;
+            case RotationArc.Y:
+                RotationYSlider.Value = value;
+                break;
+            case RotationArc.Z:
+                RotationZSlider.Value = value;
+                break;
+        }
+
+        Draw3DViews();
+    }
+
+    private double RotationArcProgress(RotationArc arc, Point point, Point center)
+    {
+        double angle = StressState.Degrees(Math.Atan2(point.Y - center.Y, point.X - center.X));
+        double offset = NormalizeCircleDegrees(angle - RotationArcStartAngle(arc));
+        return offset / 120.0;
+    }
+
+    private Point RotationArcCenter()
+    {
+        return new Point(StressTensor3DCanvas.ActualWidth / 2.0, StressTensor3DCanvas.ActualHeight / 2.0 + 10);
+    }
+
+    private double RotationArcRadius()
+    {
+        return Math.Min(StressTensor3DCanvas.ActualWidth, StressTensor3DCanvas.ActualHeight) * 0.43;
+    }
+
+    private static double RotationArcStartAngle(RotationArc arc)
+    {
+        return arc switch
+        {
+            RotationArc.X => -105.0,
+            RotationArc.Y => -195.0,
+            RotationArc.Z => 30.0,
+            _ => 0.0
+        };
+    }
+
     private void Canvas_MouseUp(object sender, MouseButtonEventArgs e)
     {
         _dragTarget = DragTarget.None;
@@ -471,6 +958,11 @@ public partial class MainWindow : Window
     {
         DrawMohrCircle();
         DrawStressTensorDiagram();
+    }
+
+    private void Canvas3D_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        Draw3DViews();
     }
 
     private DragTarget HitTestMohr(Point p)
@@ -792,6 +1284,11 @@ public partial class MainWindow : Window
 
     private static void AddArrowHead(Canvas canvas, Point tip, Vector direction, string color, double opacity = 1.0)
     {
+        if (direction.Length <= double.Epsilon)
+        {
+            return;
+        }
+
         direction.Normalize();
         Vector side = new(-direction.Y, direction.X);
         Point p1 = tip;
@@ -913,7 +1410,7 @@ public partial class MainWindow : Window
             ['v'] = "ᵥ",
             ['x'] = "ₓ",
             ['y'] = "ᵧ",
-            ['z'] = "ᶻ"
+            ['z'] = "z"
         };
 
         return string.Concat(text.ToLowerInvariant().Select(character => map.TryGetValue(character, out string? subscript) ? subscript : character.ToString()));
