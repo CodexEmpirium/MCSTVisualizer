@@ -12,6 +12,7 @@ If this later grows into a cross-platform or browser-based tool, the best altern
 
 ## Features
 
+MCSTVisualizer 1.0:
 - Editable plane-stress inputs: `sigma_x`, `sigma_y`, `tau_xy`.
 - Computed values: `sigma_ave`, `R`, `tau_max`, `sigma_max`, and `sigma_min`.
 - Clickable stress-axis labels so the plane can be changed, for example `xy`, `xz`, `yz`, `zx`, `zy`, or a custom pair.
@@ -24,6 +25,15 @@ If this later grows into a cross-platform or browser-based tool, the best altern
 - Image export as PNG, JPEG/JPG, TIFF.
 - CSV export for human-readable parameters with unit labels.
 - Settings, About, and README-based Help integration.
+
+MCSTVisualizer 1.1:
+- 3D mode:
+  - Adds a "3D" tab next to the original 2D implementation
+  - Displays an orthogonal 3D stress tensor diagram together with a "Mohr's Sphere" diagram
+  - Adds `sigma_z`, `tau_yz`, `tau_zx` principal stress parameters
+  - Adds `sigma1`, `sigma2`, and `sigma3` to the Mohr's Sphere 
+  - Implements tri-axis rotation with three draggable rotation arcs around the 3D stress tensor
+  - Diagram rotation can also be controlled by three sliders
 
 ## Build
 
@@ -55,4 +65,5 @@ The ready-made executable can already be run from `src\MCSTVisualizer\bin\Releas
 - Add a print-ready engineering report export.
 - Add examples for common loading cases.
 - Add automated tests for stress-transformation formulas.
+- Make 3D rotation values textbox-editable.
 
