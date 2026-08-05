@@ -18,6 +18,7 @@
                 <MenuItem Header="_Open" Click="Open_Click"/>
                 <MenuItem Header="_Save" Click="Save_Click"/>
                 <MenuItem Header="Save _As" Click="SaveAs_Click"/>
+                <MenuItem Header="_Report" Click="Report_Click"/>
                 <Separator/>
                 <MenuItem Header="E_xit" Click="Exit_Click"/>
             </MenuItem>
@@ -57,6 +58,19 @@
                         <Path Data="M16,12 L21,17 M21,12 L16,17" Stroke="#FFFFFF" StrokeThickness="1.6"/>
                     </Canvas>
                     <TextBlock Text="Save CSV"/>
+                </StackPanel>
+            </Button>
+            <Button ToolTip="Export print-ready engineering report" Click="Report_Click">
+                <StackPanel Orientation="Horizontal">
+                    <Canvas Width="24" Height="20" Margin="0,0,8,0" IsHitTestVisible="False" SnapsToDevicePixels="True">
+                        <Rectangle Width="15" Height="18" Canvas.Left="3" Canvas.Top="1" Stroke="#243143" StrokeThickness="1.4" Fill="#FFFFFF" RadiusX="1.5" RadiusY="1.5"/>
+                        <Line X1="6" Y1="6" X2="15" Y2="6" Stroke="#96A0AD" StrokeThickness="1"/>
+                        <Line X1="6" Y1="9" X2="15" Y2="9" Stroke="#96A0AD" StrokeThickness="1"/>
+                        <Line X1="6" Y1="12" X2="12" Y2="12" Stroke="#96A0AD" StrokeThickness="1"/>
+                        <Rectangle Width="8" Height="5" Canvas.Left="13" Canvas.Top="13" Fill="#FFF3C4" Stroke="#C18A00" StrokeThickness="1"/>
+                        <Path Data="M15,15.5 L17,17.5 L20,14" Stroke="#155E75" StrokeThickness="1.5" Fill="Transparent" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                    </Canvas>
+                    <TextBlock Text="Report"/>
                 </StackPanel>
             </Button>
         </ToolBar>

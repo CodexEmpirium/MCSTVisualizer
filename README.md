@@ -24,6 +24,7 @@ MCSTVisualizer 1.0:
 - File menu with Open, Save, and Save As.
 - Image export as PNG, JPEG/JPG, TIFF.
 - CSV export for human-readable parameters with unit labels.
+- Print-ready engineering report export with highlighted resultant and principal stresses.
 - Settings, About, and README-based Help integration.
 
 MCSTVisualizer 1.1:
@@ -62,7 +63,6 @@ The ready-made executable can already be run from `src\MCSTVisualizer\bin\Releas
 
 ## Suggested Future Improvements
 
-- Add a print-ready engineering report export.
 - Add examples for common loading cases.
 - Add automated tests for stress-transformation formulas.
 - Make 3D rotation values textbox-editable.

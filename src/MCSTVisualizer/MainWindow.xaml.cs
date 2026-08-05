@@ -1029,6 +1029,11 @@ public partial class MainWindow : Window
         SaveAs(preferScreenshot: true);
     }
 
+    private void Report_Click(object sender, RoutedEventArgs e)
+    {
+        SaveReport();
+    }
+
     private void SaveAs(bool preferCsv = false, bool preferScreenshot = false)
     {
         string timestamp = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss", CultureInfo.InvariantCulture);
@@ -1059,6 +1064,23 @@ public partial class MainWindow : Window
                 ScreenshotExporter.SaveFrameworkElement(RootVisual, dialog.FileName);
                 StatusText.Content = $"Saved screenshot {System.IO.Path.GetFileName(dialog.FileName)}";
             }
+        }
+    }
+
+    private void SaveReport()
+    {
+        string timestamp = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss", CultureInfo.InvariantCulture);
+        SaveFileDialog dialog = new()
+        {
+            FileName = $"MCSTVisualizer_Report_{timestamp}",
+            Filter = "Printable HTML report (*.html)|*.html|All files (*.*)|*.*",
+            FilterIndex = 1
+        };
+
+        if (dialog.ShowDialog(this) == true)
+        {
+            EngineeringReportExporter.Save(dialog.FileName, _state, _state3D, UnitLabel, DisplayScale);
+            StatusText.Content = $"Saved report {System.IO.Path.GetFileName(dialog.FileName)}";
         }
     }
 
