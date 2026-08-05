@@ -36,6 +36,13 @@ MCSTVisualizer 1.1:
   - Implements tri-axis rotation with three draggable rotation arcs around the 3D stress tensor
   - Diagram rotation can also be controlled by three sliders
 
+MCSTVisualizer 1.1.1:
+- Adds a `Report` button and `File -> Report` command.
+- Exports a print-ready engineering HTML report.
+- Includes 2D inputs, transformed 2D resultants, 3D tensor inputs, the 3D tensor matrix, principal stresses, maximum shear stress, and mean stress.
+- Highlights resultant and principal stress rows for review and printing.
+- Release publishing is now configured as a self-contained single-file Windows x64 executable for distribution.
+
 ## Build
 
 # Developers:
@@ -44,10 +51,11 @@ Install the .NET Desktop SDK for Windows, then run these from the repo root:
 ```powershell
 dotnet build .\MCSTVisualizer.sln [-c Release]
 dotnet run --project .\src\MCSTVisualizer\MCSTVisualizer.csproj
+dotnet publish .\src\MCSTVisualizer\MCSTVisualizer.csproj -c Release
 ```
 
 # Users:
-The ready-made executable can already be run from `src\MCSTVisualizer\bin\Release\net10.0-windows\win-x64`.
+The ready-made standalone executable can be run from `src\MCSTVisualizer\bin\Release\net10.0-windows\win-x64\publish\MCSTVisualizer.exe`. It is published as a self-contained Windows x64 app, so the target PC does not need the .NET Desktop Runtime installed.
 
 ## Notes
 
