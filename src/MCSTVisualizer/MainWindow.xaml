@@ -124,6 +124,10 @@
                                 <ComboBoxItem Content="MPa" IsSelected="True"/>
                                 <ComboBoxItem Content="GPa"/>
                             </ComboBox>
+                            <TextBlock x:Name="TauAllowLabel" Text="tau_allow"/>
+                            <TextBox x:Name="TauAllowBox" TextChanged="AllowableBox_TextChanged"/>
+                            <TextBlock Text="n"/>
+                            <TextBox x:Name="SafetyFactorBox" TextChanged="AllowableBox_TextChanged"/>
                             <TextBlock x:Name="SigmaXLabel" Text="sigma_x"/>
                             <TextBox x:Name="SigmaXBox" TextChanged="ValueBox_TextChanged"/>
                             <TextBlock x:Name="SigmaYLabel" Text="sigma_y"/>
@@ -138,7 +142,7 @@
                             <TextBox x:Name="TauMaxBox" TextChanged="ValueBox_TextChanged"/>
                             <Separator Margin="0,8"/>
                             <TextBlock x:Name="ThetaLabel" Text="theta, degrees"/>
-                            <TextBox x:Name="ThetaBox" TextChanged="ValueBox_TextChanged"/>
+                            <TextBox x:Name="ThetaBox" TextChanged="ValueBox_TextChanged" LostFocus="AngleBox_LostFocus" KeyDown="AngleBox_KeyDown"/>
                             <TextBlock x:Name="DerivedText" Margin="0,10,0,0" TextWrapping="Wrap"/>
                         </StackPanel>
                     </ScrollViewer>
@@ -180,6 +184,10 @@
                                 <ComboBoxItem Content="MPa" IsSelected="True"/>
                                 <ComboBoxItem Content="GPa"/>
                             </ComboBox>
+                            <TextBlock x:Name="TauAllow3DLabel" Text="tau_allow"/>
+                            <TextBox x:Name="TauAllow3DBox" TextChanged="AllowableBox_TextChanged"/>
+                            <TextBlock Text="n"/>
+                            <TextBox x:Name="SafetyFactor3DBox" TextChanged="AllowableBox_TextChanged"/>
                             <TextBlock x:Name="Sigma3DXLabel" Text="sigma_x"/>
                             <TextBox x:Name="Sigma3DXBox" TextChanged="Value3DBox_TextChanged"/>
                             <TextBlock x:Name="Sigma3DYLabel" Text="sigma_y"/>
@@ -194,11 +202,14 @@
                             <TextBox x:Name="Tau3DZXBox" TextChanged="Value3DBox_TextChanged"/>
                             <Separator Margin="0,10"/>
                             <TextBlock Text="Rotation" FontSize="15" FontWeight="SemiBold" Margin="0,0,0,8"/>
-                            <TextBlock x:Name="RotationXText" Text="X: 0 deg"/>
+                            <TextBlock Text="X, degrees"/>
+                            <TextBox x:Name="RotationXBox" TextChanged="Rotation3DBox_TextChanged" LostFocus="AngleBox_LostFocus" KeyDown="AngleBox_KeyDown"/>
                             <Slider x:Name="RotationXSlider" Minimum="-180" Maximum="180" TickFrequency="15" IsSnapToTickEnabled="False" ValueChanged="Rotation3D_ValueChanged"/>
-                            <TextBlock x:Name="RotationYText" Text="Y: 0 deg"/>
+                            <TextBlock Text="Y, degrees"/>
+                            <TextBox x:Name="RotationYBox" TextChanged="Rotation3DBox_TextChanged" LostFocus="AngleBox_LostFocus" KeyDown="AngleBox_KeyDown"/>
                             <Slider x:Name="RotationYSlider" Minimum="-180" Maximum="180" TickFrequency="15" IsSnapToTickEnabled="False" ValueChanged="Rotation3D_ValueChanged"/>
-                            <TextBlock x:Name="RotationZText" Text="Z: 0 deg"/>
+                            <TextBlock Text="Z, degrees"/>
+                            <TextBox x:Name="RotationZBox" TextChanged="Rotation3DBox_TextChanged" LostFocus="AngleBox_LostFocus" KeyDown="AngleBox_KeyDown"/>
                             <Slider x:Name="RotationZSlider" Minimum="-180" Maximum="180" TickFrequency="15" IsSnapToTickEnabled="False" ValueChanged="Rotation3D_ValueChanged"/>
                             <TextBlock x:Name="Derived3DText" Margin="0,10,0,0" TextWrapping="Wrap"/>
                         </StackPanel>

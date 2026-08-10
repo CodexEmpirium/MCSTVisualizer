@@ -13,17 +13,20 @@ public static class EngineeringReportExporter
         StressState state,
         StressState3D state3D,
         string stressUnit,
-        double stressScale)
+        double stressScale,
+        double tauAllow,
+        double safetyFactor)
     {
         using StreamWriter writer = new(path, false, Encoding.UTF8);
-        writer.Write(BuildReport(state, state3D, stressUnit, stressScale));
+        writer.Write(BuildReport(state, state3D, stressUnit, stressScale, tauAllow, safetyFactor));
     }
 
-    private static string BuildReport(StressState state, StressState3D state3D, string unit, double scale)
+    private static string BuildReport(StressState state, StressState3D state3D, string unit, double scale, double tauAllow, double safetyFactor)
     {
         var transformed = state.Transform(state.PhysicalAngleDegrees);
         double[] principal3D = state3D.PrincipalStresses();
         double maxShear3D = (principal3D[0] - principal3D[2]) / 2.0;
+        double allowableLimit = tauAllow / Math.Max(1e-12, safetyFactor);
 
         StringBuilder html = new();
         html.AppendLine("<!doctype html>");
@@ -33,7 +36,7 @@ public static class EngineeringReportExporter
         html.AppendLine("<title>MCST Engineering Stress Report</title>");
         html.AppendLine("<style>");
         html.AppendLine("""
-            :root { color-scheme: light; --ink: #172033; --muted: #5d6675; --line: #ccd4df; --soft: #eef4fb; --accent: #155e75; --result: #fff3c4; }
+            :root { color-scheme: light; --ink: #172033; --muted: #5d6675; --line: #ccd4df; --soft: #eef4fb; --accent: #155e75; --result: #fff3c4; --danger: #c2410c; }
             * { box-sizing: border-box; }
             body { margin: 0; color: var(--ink); background: #ffffff; font-family: "Segoe UI", Arial, sans-serif; font-size: 12px; }
             main { max-width: 900px; margin: 0 auto; padding: 32px; }
@@ -46,6 +49,7 @@ public static class EngineeringReportExporter
             th { background: var(--soft); font-weight: 600; }
             td.value { text-align: right; font-variant-numeric: tabular-nums; }
             tr.result td { background: var(--result); font-weight: 700; }
+            tr.exceeded td.value { color: var(--danger); font-weight: 800; }
             .tensor { font-family: Consolas, "Courier New", monospace; white-space: pre; line-height: 1.45; padding: 12px; border: 1px solid var(--line); background: #f8fafc; }
             footer { margin-top: 28px; padding-top: 10px; border-top: 1px solid var(--line); color: var(--muted); font-size: 11px; }
             @page { margin: 0.55in; }
@@ -69,6 +73,12 @@ public static class EngineeringReportExporter
         html.AppendLine("</div>");
         html.AppendLine("</header>");
 
+        AppendSection(html, "Allowable Stress Check", [
+            Row("tau_allow", tauAllow, unit, scale),
+            Row("n", safetyFactor, string.Empty, 1.0),
+            Row("tau_allow / n", allowableLimit, unit, scale)
+        ]);
+
         AppendSection(html, "2D Plane Stress Inputs", [
             Row($"sigma_{state.Axis1}", state.SigmaX, unit, scale),
             Row($"sigma_{state.Axis2}", state.SigmaY, unit, scale),
@@ -77,18 +87,18 @@ public static class EngineeringReportExporter
         ]);
 
         AppendSection(html, "2D Resultant Stresses", [
-            Row("sigma_ave", state.SigmaAverage, unit, scale, true),
-            Row("R", state.Radius, unit, scale, true),
-            Row("tau_max", state.TauMax, unit, scale, true),
-            Row("sigma_max", state.SigmaMax, unit, scale, true),
-            Row("sigma_min", state.SigmaMin, unit, scale, true),
+            Row("sigma_ave", state.SigmaAverage, unit, scale, true, allowableLimit),
+            Row("R", state.Radius, unit, scale, true, allowableLimit),
+            Row("tau_max", state.TauMax, unit, scale, true, allowableLimit),
+            Row("sigma_max", state.SigmaMax, unit, scale, true, allowableLimit),
+            Row("sigma_min", state.SigmaMin, unit, scale, true, allowableLimit),
             Row("principal angle", state.PrincipalAngleDegrees, "deg", 1.0)
         ]);
 
         AppendSection(html, "2D Transformed Resultants", [
-            Row($"sigma_{state.Axis1}'", transformed.SigmaXP, unit, scale, true),
-            Row($"sigma_{state.Axis2}'", transformed.SigmaYP, unit, scale, true),
-            Row($"tau_{state.Axis1}'{state.Axis2}'", transformed.TauXYP, unit, scale, true)
+            Row($"sigma_{state.Axis1}'", transformed.SigmaXP, unit, scale, true, allowableLimit),
+            Row($"sigma_{state.Axis2}'", transformed.SigmaYP, unit, scale, true, allowableLimit),
+            Row($"tau_{state.Axis1}'{state.Axis2}'", transformed.TauXYP, unit, scale, true, allowableLimit)
         ]);
 
         AppendSection(html, "3D Stress Tensor Inputs", [
@@ -108,23 +118,24 @@ public static class EngineeringReportExporter
         html.AppendLine("</div>");
 
         AppendSection(html, "3D Principal and Resultant Stresses", [
-            Row("sigma_1", principal3D[0], unit, scale, true),
-            Row("sigma_2", principal3D[1], unit, scale, true),
-            Row("sigma_3", principal3D[2], unit, scale, true),
-            Row("tau_max", maxShear3D, unit, scale, true),
-            Row("sigma_mean", state3D.MeanStress, unit, scale, true)
+            Row("sigma_1", principal3D[0], unit, scale, true, allowableLimit),
+            Row("sigma_2", principal3D[1], unit, scale, true, allowableLimit),
+            Row("sigma_3", principal3D[2], unit, scale, true, allowableLimit),
+            Row("tau_max", maxShear3D, unit, scale, true, allowableLimit),
+            Row("sigma_mean", state3D.MeanStress, unit, scale, true, allowableLimit)
         ]);
 
-        html.AppendLine("<footer>Resultant stress rows are highlighted for review and printing.</footer>");
+        html.AppendLine("<footer>Resultant stress rows are highlighted for review and values exceeding tau_allow / n are shown in red.</footer>");
         html.AppendLine("</main>");
         html.AppendLine("</body>");
         html.AppendLine("</html>");
         return html.ToString();
     }
 
-    private static ReportRow Row(string label, double value, string unit, double scale, bool result = false)
+    private static ReportRow Row(string label, double value, string unit, double scale, bool result = false, double? allowableLimit = null)
     {
-        return new ReportRow(label, Fmt(value, scale), unit, result);
+        bool exceeded = result && allowableLimit.HasValue && unit != "deg" && Math.Abs(value) > allowableLimit.Value;
+        return new ReportRow(label, Fmt(value, scale), unit, result, exceeded);
     }
 
     private static void AppendSection(StringBuilder html, string title, IEnumerable<ReportRow> rows)
@@ -135,8 +146,9 @@ public static class EngineeringReportExporter
         html.AppendLine("<tbody>");
         foreach (ReportRow row in rows)
         {
-            string resultClass = row.IsResult ? " class=\"result\"" : string.Empty;
-            html.AppendLine($"<tr{resultClass}><td>{Escape(row.Label)}</td><td class=\"value\">{Escape(row.Value)}</td><td>{Escape(row.Unit)}</td></tr>");
+            string rowClass = string.Join(" ", new[] { row.IsResult ? "result" : string.Empty, row.IsExceeded ? "exceeded" : string.Empty }.Where(value => value.Length > 0));
+            string classAttribute = rowClass.Length > 0 ? $" class=\"{rowClass}\"" : string.Empty;
+            html.AppendLine($"<tr{classAttribute}><td>{Escape(row.Label)}</td><td class=\"value\">{Escape(row.Value)}</td><td>{Escape(row.Unit)}</td></tr>");
         }
 
         html.AppendLine("</tbody>");
@@ -153,5 +165,5 @@ public static class EngineeringReportExporter
         return WebUtility.HtmlEncode(value);
     }
 
-    private sealed record ReportRow(string Label, string Value, string Unit, bool IsResult);
+    private sealed record ReportRow(string Label, string Value, string Unit, bool IsResult, bool IsExceeded);
 }

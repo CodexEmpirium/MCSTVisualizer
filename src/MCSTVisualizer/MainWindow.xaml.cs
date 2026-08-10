@@ -3,6 +3,7 @@ using System.Globalization;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Media3D;
@@ -25,7 +26,9 @@ public partial class MainWindow : Window
         TauXY,
         TauMax,
         AngleLine,
-        StressTensorDiagram
+        StressTensorDiagram,
+        StressTensorRightRotate,
+        StressTensor3DRightRotate
     }
 
     private enum RotationArc
@@ -40,6 +43,7 @@ public partial class MainWindow : Window
     private const double DragMinimumRadius = 0.000001;
     private const double ThetaSnapToZeroToleranceDegrees = 2.0;
     private const double MohrAngleSnapToleranceDegrees = 1.0;
+    private const double RotationSnapToZeroToleranceDegrees = 2.0;
     private const double PsiPerGPa = 145037.73773;
     private const double MinStressArrowLength = 14.0;
     private const double MaxStressArrowLength = 58.0;
@@ -48,6 +52,8 @@ public partial class MainWindow : Window
     private StressState _state = new();
     private StressState3D _state3D = new();
     private StressDisplayUnit _displayUnit = StressDisplayUnit.MPa;
+    private double _tauAllow = 0.12;
+    private double _safetyFactor = 1.0;
     private bool _isUpdatingUi = true;
     private DragTarget _dragTarget = DragTarget.None;
     private string? _currentPath;
@@ -61,6 +67,9 @@ public partial class MainWindow : Window
     private Point _dragStartPoint;
     private StressState _dragStartState = new();
     private RotationArc _dragRotationArc = RotationArc.None;
+    private double _dragStartRotationX;
+    private double _dragStartRotationY;
+    private double _dragStartRotationZ;
 
     private enum StressDisplayUnit
     {
@@ -70,6 +79,8 @@ public partial class MainWindow : Window
         MPa,
         KPa
     }
+
+    private sealed record ResultLine(string Label, double Value, string Unit, bool CheckAllowable);
 
     public MainWindow()
     {
@@ -81,6 +92,8 @@ public partial class MainWindow : Window
     {
         SyncUiFromState();
     }
+
+    private double AllowableStressLimit => _tauAllow / Math.Max(DragMinimumRadius, _safetyFactor);
 
     private void SyncUiFromState(bool preserveThetaText = false)
     {
@@ -101,6 +114,9 @@ public partial class MainWindow : Window
             Stress3DUnitBox.SelectedIndex = StressUnitBox.SelectedIndex;
         }
         StressValuesHeader.Text = $"Stress Values ({UnitLabel})";
+        TauAllowLabel.Text = $"{Tau("allow")} ({UnitLabel})";
+        TauAllowBox.Text = FormatStress(_tauAllow);
+        SafetyFactorBox.Text = Format(_safetyFactor);
         SigmaXLabel.Text = $"{Sigma(_state.Axis1)} ({UnitLabel})";
         SigmaYLabel.Text = $"{Sigma(_state.Axis2)} ({UnitLabel})";
         TauXYLabel.Text = $"{Tau(_state.Axis1, _state.Axis2)} ({UnitLabel})";
@@ -118,13 +134,17 @@ public partial class MainWindow : Window
             ThetaBox.Text = FormatAngle(_state.PhysicalAngleDegrees);
         }
         var transformed = _state.Transform(_state.PhysicalAngleDegrees);
-        DerivedText.Text =
-            $"{Sigma("max")} = {FormatStress(_state.SigmaMax)} {UnitLabel}\n" +
-            $"{Sigma("min")} = {FormatStress(_state.SigmaMin)} {UnitLabel}\n" +
-            $"principal angle = {FormatAngle(_state.PrincipalAngleDegrees)} deg\n" +
-            $"{SigmaPrime(_state.Axis1)} = {FormatStress(transformed.SigmaXP)} {UnitLabel}\n" +
-            $"{SigmaPrime(_state.Axis2)} = {FormatStress(transformed.SigmaYP)} {UnitLabel}\n" +
-            $"{TauPrime(_state.Axis1, _state.Axis2)} = {FormatStress(transformed.TauXYP)} {UnitLabel}";
+        SetResultText(DerivedText, [
+            new ResultLine($"{Tau("allow")}/n", AllowableStressLimit, UnitLabel, false),
+            new ResultLine("R", _state.Radius, UnitLabel, true),
+            new ResultLine(Tau("max"), _state.TauMax, UnitLabel, true),
+            new ResultLine(Sigma("max"), _state.SigmaMax, UnitLabel, true),
+            new ResultLine(Sigma("min"), _state.SigmaMin, UnitLabel, true),
+            new ResultLine("principal angle", _state.PrincipalAngleDegrees, "deg", false),
+            new ResultLine(SigmaPrime(_state.Axis1), transformed.SigmaXP, UnitLabel, true),
+            new ResultLine(SigmaPrime(_state.Axis2), transformed.SigmaYP, UnitLabel, true),
+            new ResultLine(TauPrime(_state.Axis1, _state.Axis2), transformed.TauXYP, UnitLabel, true)
+        ]);
         _isUpdatingUi = false;
 
         DrawMohrCircle();
@@ -141,6 +161,9 @@ public partial class MainWindow : Window
 
         _isUpdatingUi = true;
         Stress3DValuesHeader.Text = $"3D Stress Tensor ({UnitLabel})";
+        TauAllow3DLabel.Text = $"{Tau("allow")} ({UnitLabel})";
+        TauAllow3DBox.Text = FormatStress(_tauAllow);
+        SafetyFactor3DBox.Text = Format(_safetyFactor);
         Sigma3DXLabel.Text = $"{Sigma("x")} ({UnitLabel})";
         Sigma3DYLabel.Text = $"{Sigma("y")} ({UnitLabel})";
         Sigma3DZLabel.Text = $"{Sigma("z")} ({UnitLabel})";
@@ -153,14 +176,17 @@ public partial class MainWindow : Window
         Tau3DXYBox.Text = FormatStress(_state3D.TauXY);
         Tau3DYZBox.Text = FormatStress(_state3D.TauYZ);
         Tau3DZXBox.Text = FormatStress(_state3D.TauZX);
+        SyncRotationTextBoxes();
 
         double[] principal = _state3D.PrincipalStresses();
-        Derived3DText.Text =
-            $"{Sigma("1")} = {FormatStress(principal[0])} {UnitLabel}\n" +
-            $"{Sigma("2")} = {FormatStress(principal[1])} {UnitLabel}\n" +
-            $"{Sigma("3")} = {FormatStress(principal[2])} {UnitLabel}\n" +
-            $"{Tau("max")} = {FormatStress((principal[0] - principal[2]) / 2.0)} {UnitLabel}\n" +
-            $"{Sigma("mean")} = {FormatStress(_state3D.MeanStress)} {UnitLabel}";
+        SetResultText(Derived3DText, [
+            new ResultLine($"{Tau("allow")}/n", AllowableStressLimit, UnitLabel, false),
+            new ResultLine(Sigma("1"), principal[0], UnitLabel, true),
+            new ResultLine(Sigma("2"), principal[1], UnitLabel, true),
+            new ResultLine(Sigma("3"), principal[2], UnitLabel, true),
+            new ResultLine(Tau("max"), (principal[0] - principal[2]) / 2.0, UnitLabel, true),
+            new ResultLine(Sigma("mean"), _state3D.MeanStress, UnitLabel, true)
+        ]);
         _isUpdatingUi = false;
 
         Draw3DViews();
@@ -273,17 +299,163 @@ public partial class MainWindow : Window
         Sync3DUiFromState();
     }
 
-    private void Rotation3D_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    private void AllowableBox_TextChanged(object sender, TextChangedEventArgs e)
     {
-        if (_isUpdatingUi || RotationXText is null)
+        if (_isUpdatingUi)
         {
             return;
         }
 
-        RotationXText.Text = $"X: {FormatAngle(RotationXSlider.Value)} deg";
-        RotationYText.Text = $"Y: {FormatAngle(RotationYSlider.Value)} deg";
-        RotationZText.Text = $"Z: {FormatAngle(RotationZSlider.Value)} deg";
+        TextBox tauBox = sender == TauAllow3DBox ? TauAllow3DBox : TauAllowBox;
+        TextBox nBox = sender == SafetyFactor3DBox ? SafetyFactor3DBox : SafetyFactorBox;
+        if (!TryRead(tauBox, out double tauAllow) || !TryRead(nBox, out double safetyFactor))
+        {
+            return;
+        }
+
+        _tauAllow = Math.Max(0.0, FromDisplayUnit(tauAllow));
+        _safetyFactor = Math.Max(DragMinimumRadius, safetyFactor);
+        SyncUiFromState();
+    }
+
+    private void Rotation3D_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (_isUpdatingUi || RotationXBox is null)
+        {
+            return;
+        }
+
+        if (sender == RotationXSlider)
+        {
+            SetRotationValue(RotationArc.X, RotationXSlider.Value);
+        }
+        else if (sender == RotationYSlider)
+        {
+            SetRotationValue(RotationArc.Y, RotationYSlider.Value);
+        }
+        else if (sender == RotationZSlider)
+        {
+            SetRotationValue(RotationArc.Z, RotationZSlider.Value);
+        }
+
+        SyncRotationTextBoxes();
         Draw3DViews();
+    }
+
+    private void Rotation3DBox_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (_isUpdatingUi)
+        {
+            return;
+        }
+
+        if (sender is not TextBox box || !TryRead(box, out double value))
+        {
+            return;
+        }
+
+        RotationArc arc = box == RotationXBox
+            ? RotationArc.X
+            : box == RotationYBox
+                ? RotationArc.Y
+                : RotationArc.Z;
+        SetRotationValue(arc, value, snapToZero: false, updateText: !box.IsKeyboardFocusWithin);
+        Draw3DViews();
+    }
+
+    private void AngleBox_LostFocus(object sender, RoutedEventArgs e)
+    {
+        CommitAngleBox(sender);
+    }
+
+    private void AngleBox_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Enter)
+        {
+            return;
+        }
+
+        CommitAngleBox(sender);
+        if (sender is TextBox box)
+        {
+            box.SelectAll();
+        }
+
+        e.Handled = true;
+    }
+
+    private void CommitAngleBox(object sender)
+    {
+        if (sender == ThetaBox && TryRead(ThetaBox, out double theta))
+        {
+            _state.PhysicalAngleDegrees = NormalizeDegrees(theta);
+            _isUpdatingUi = true;
+            ThetaBox.Text = FormatAngle(_state.PhysicalAngleDegrees);
+            _isUpdatingUi = false;
+            SyncUiFromState();
+        }
+        else if (sender == RotationXBox && TryRead(RotationXBox, out double x))
+        {
+            SetRotationValue(RotationArc.X, x, snapToZero: false);
+            Draw3DViews();
+        }
+        else if (sender == RotationYBox && TryRead(RotationYBox, out double y))
+        {
+            SetRotationValue(RotationArc.Y, y, snapToZero: false);
+            Draw3DViews();
+        }
+        else if (sender == RotationZBox && TryRead(RotationZBox, out double z))
+        {
+            SetRotationValue(RotationArc.Z, z, snapToZero: false);
+            Draw3DViews();
+        }
+    }
+
+    private void SyncRotationTextBoxes()
+    {
+        if (RotationXBox is null)
+        {
+            return;
+        }
+
+        bool wasUpdating = _isUpdatingUi;
+        _isUpdatingUi = true;
+        RotationXBox.Text = FormatRotation(RotationXSlider.Value);
+        RotationYBox.Text = FormatRotation(RotationYSlider.Value);
+        RotationZBox.Text = FormatRotation(RotationZSlider.Value);
+        _isUpdatingUi = wasUpdating;
+    }
+
+    private void SetRotationValue(RotationArc arc, double value, bool snapToZero = true, bool updateText = true)
+    {
+        double clamped = ClampRotation(value, snapToZero);
+        _isUpdatingUi = true;
+        switch (arc)
+        {
+            case RotationArc.X:
+                RotationXSlider.Value = clamped;
+                if (updateText)
+                {
+                    RotationXBox.Text = FormatRotation(clamped);
+                }
+                break;
+            case RotationArc.Y:
+                RotationYSlider.Value = clamped;
+                if (updateText)
+                {
+                    RotationYBox.Text = FormatRotation(clamped);
+                }
+                break;
+            case RotationArc.Z:
+                RotationZSlider.Value = clamped;
+                if (updateText)
+                {
+                    RotationZBox.Text = FormatRotation(clamped);
+                }
+                break;
+        }
+
+        _isUpdatingUi = false;
     }
 
     private void MainTabs_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -462,7 +634,7 @@ public partial class MainWindow : Window
         double width = StressTensor3DCanvas.ActualWidth;
         double height = StressTensor3DCanvas.ActualHeight;
         Point center = new(width / 2.0, height / 2.0 + 10);
-        double side = Math.Min(width, height) * 0.42;
+        double side = Math.Min(width, height) * 0.34;
         double half = side / 2.0;
         double scale = side;
 
@@ -519,14 +691,14 @@ public partial class MainWindow : Window
         DrawTractionArrow(new Vector3D(0, 0, -1), Sigma("z"), "#286090", center, half, maxMagnitude);
 
         AddText(StressTensor3DCanvas, TensorMatrixText(), 18, 16, 12, "#55606D");
-        DrawRotationArcs(center, Math.Min(width, height) * 0.43);
+        DrawRotationArcs(center, RotationArcRadius());
     }
 
     private void DrawRotationArcs(Point center, double radius)
     {
-        DrawRotationArc(RotationArc.X, center, radius, -45.0, RotationXSlider.Value, "#7B2CBF");
-        DrawRotationArc(RotationArc.Y, center, radius, -135.0, RotationYSlider.Value, "#1B7F5A");
-        DrawRotationArc(RotationArc.Z, center, radius, 90.0, RotationZSlider.Value, "#286090");
+        DrawRotationArc(RotationArc.X, center, radius, RotationArcCenterAngle(RotationArc.X), RotationXSlider.Value, "#7B2CBF");
+        DrawRotationArc(RotationArc.Y, center, radius, RotationArcCenterAngle(RotationArc.Y), RotationYSlider.Value, "#1B7F5A");
+        DrawRotationArc(RotationArc.Z, center, radius, RotationArcCenterAngle(RotationArc.Z), RotationZSlider.Value, "#286090");
     }
 
     private void DrawRotationArc(RotationArc arc, Point center, double radius, double centerAngleDegrees, double valueDegrees, string color)
@@ -823,8 +995,18 @@ public partial class MainWindow : Window
 
     private void StressTensorCanvas_MouseDown(object sender, MouseButtonEventArgs e)
     {
-        _dragTarget = DragTarget.StressTensorDiagram;
         Point p = e.GetPosition(StressTensorCanvas);
+        if (e.ChangedButton == MouseButton.Right)
+        {
+            _dragTarget = DragTarget.StressTensorRightRotate;
+            _dragStartPoint = p;
+            _dragStartState = _state.Clone();
+            StressTensorCanvas.CaptureMouse();
+            e.Handled = true;
+            return;
+        }
+
+        _dragTarget = DragTarget.StressTensorDiagram;
         _dragStartPoint = p;
         _dragStartState = _state.Clone();
         Point center = new(StressTensorCanvas.ActualWidth / 2.0, StressTensorCanvas.ActualHeight / 2.0 + 10);
@@ -834,6 +1016,19 @@ public partial class MainWindow : Window
 
     private void StressTensorCanvas_MouseMove(object sender, MouseEventArgs e)
     {
+        if (_dragTarget == DragTarget.StressTensorRightRotate)
+        {
+            if (e.RightButton != MouseButtonState.Pressed)
+            {
+                return;
+            }
+
+            Point dragPoint = e.GetPosition(StressTensorCanvas);
+            _state.PhysicalAngleDegrees = NormalizeDegreesWithSnap(_dragStartState.PhysicalAngleDegrees + (dragPoint.X - _dragStartPoint.X) * 0.35);
+            SyncUiFromState();
+            return;
+        }
+
         if (_dragTarget != DragTarget.StressTensorDiagram || e.LeftButton != MouseButtonState.Pressed)
         {
             return;
@@ -850,6 +1045,18 @@ public partial class MainWindow : Window
     private void StressTensor3DCanvas_MouseDown(object sender, MouseButtonEventArgs e)
     {
         Point p = e.GetPosition(StressTensor3DCanvas);
+        if (e.ChangedButton == MouseButton.Right)
+        {
+            _dragTarget = DragTarget.StressTensor3DRightRotate;
+            _dragStartPoint = p;
+            _dragStartRotationX = RotationXSlider.Value;
+            _dragStartRotationY = RotationYSlider.Value;
+            _dragStartRotationZ = RotationZSlider.Value;
+            StressTensor3DCanvas.CaptureMouse();
+            e.Handled = true;
+            return;
+        }
+
         _dragRotationArc = HitTestRotationArc(p);
         if (_dragRotationArc == RotationArc.None)
         {
@@ -863,6 +1070,22 @@ public partial class MainWindow : Window
 
     private void StressTensor3DCanvas_MouseMove(object sender, MouseEventArgs e)
     {
+        if (_dragTarget == DragTarget.StressTensor3DRightRotate)
+        {
+            if (e.RightButton != MouseButtonState.Pressed)
+            {
+                return;
+            }
+
+            Point p = e.GetPosition(StressTensor3DCanvas);
+            SetRotationValue(RotationArc.X, _dragStartRotationX - (p.Y - _dragStartPoint.Y) * 0.35);
+            SetRotationValue(RotationArc.Y, _dragStartRotationY);
+            SetRotationValue(RotationArc.Z, _dragStartRotationZ + (p.X - _dragStartPoint.X) * 0.35);
+            Draw3DViews();
+            e.Handled = true;
+            return;
+        }
+
         if (_dragRotationArc == RotationArc.None || e.LeftButton != MouseButtonState.Pressed)
         {
             return;
@@ -874,6 +1097,7 @@ public partial class MainWindow : Window
 
     private void StressTensor3DCanvas_MouseUp(object sender, MouseButtonEventArgs e)
     {
+        _dragTarget = DragTarget.None;
         _dragRotationArc = RotationArc.None;
         StressTensor3DCanvas.ReleaseMouseCapture();
     }
@@ -890,7 +1114,7 @@ public partial class MainWindow : Window
         foreach (RotationArc arc in new[] { RotationArc.X, RotationArc.Y, RotationArc.Z })
         {
             double radialDistance = Math.Abs(Distance(point, center) - radius);
-            if (radialDistance <= 20.0 && RotationArcProgress(arc, point, center) is >= 0.0 and <= 1.0)
+            if (radialDistance <= 20.0 && Math.Abs(RotationArcDeltaDegrees(arc, point, center)) <= 60.0)
             {
                 return arc;
             }
@@ -901,18 +1125,18 @@ public partial class MainWindow : Window
 
     private void UpdateRotationFromArcPoint(RotationArc arc, Point point)
     {
-        double progress = Math.Clamp(RotationArcProgress(arc, point, RotationArcCenter()), 0.0, 1.0);
+        double progress = RotationArcProgress(arc, point, RotationArcCenter());
         double value = progress * 360.0 - 180.0;
         switch (arc)
         {
             case RotationArc.X:
-                RotationXSlider.Value = value;
+                SetRotationValue(RotationArc.X, value);
                 break;
             case RotationArc.Y:
-                RotationYSlider.Value = value;
+                SetRotationValue(RotationArc.Y, value);
                 break;
             case RotationArc.Z:
-                RotationZSlider.Value = value;
+                SetRotationValue(RotationArc.Z, value);
                 break;
         }
 
@@ -921,9 +1145,14 @@ public partial class MainWindow : Window
 
     private double RotationArcProgress(RotationArc arc, Point point, Point center)
     {
+        double delta = Math.Clamp(RotationArcDeltaDegrees(arc, point, center), -60.0, 60.0);
+        return (delta + 60.0) / 120.0;
+    }
+
+    private static double RotationArcDeltaDegrees(RotationArc arc, Point point, Point center)
+    {
         double angle = StressState.Degrees(Math.Atan2(point.Y - center.Y, point.X - center.X));
-        double offset = NormalizeCircleDegrees(angle - RotationArcStartAngle(arc));
-        return offset / 120.0;
+        return NormalizeSignedDegrees(angle - RotationArcCenterAngle(arc));
     }
 
     private Point RotationArcCenter()
@@ -933,16 +1162,21 @@ public partial class MainWindow : Window
 
     private double RotationArcRadius()
     {
-        return Math.Min(StressTensor3DCanvas.ActualWidth, StressTensor3DCanvas.ActualHeight) * 0.43;
+        return Math.Min(StressTensor3DCanvas.ActualWidth, StressTensor3DCanvas.ActualHeight) * 0.47;
     }
 
     private static double RotationArcStartAngle(RotationArc arc)
     {
+        return RotationArcCenterAngle(arc) - 60.0;
+    }
+
+    private static double RotationArcCenterAngle(RotationArc arc)
+    {
         return arc switch
         {
-            RotationArc.X => -105.0,
-            RotationArc.Y => -195.0,
-            RotationArc.Z => 30.0,
+            RotationArc.X => -30.0,
+            RotationArc.Y => -150.0,
+            RotationArc.Z => 90.0,
             _ => 0.0
         };
     }
@@ -1079,7 +1313,7 @@ public partial class MainWindow : Window
 
         if (dialog.ShowDialog(this) == true)
         {
-            EngineeringReportExporter.Save(dialog.FileName, _state, _state3D, UnitLabel, DisplayScale);
+            EngineeringReportExporter.Save(dialog.FileName, _state, _state3D, UnitLabel, DisplayScale, _tauAllow, _safetyFactor);
             StatusText.Content = $"Saved report {System.IO.Path.GetFileName(dialog.FileName)}";
         }
     }
@@ -1304,6 +1538,47 @@ public partial class MainWindow : Window
         canvas.Children.Add(block);
     }
 
+    private void SetResultText(TextBlock block, IEnumerable<ResultLine> lines)
+    {
+        block.Inlines.Clear();
+        bool first = true;
+        foreach (ResultLine line in lines)
+        {
+            if (!first)
+            {
+                block.Inlines.Add(new LineBreak());
+            }
+
+            first = false;
+            block.Inlines.Add(new Run($"{line.Label} = "));
+            block.Inlines.Add(new Run(FormatResultValue(line))
+            {
+                Foreground = ResultBrush(line),
+                FontWeight = IsAllowableExceeded(line) ? FontWeights.Bold : FontWeights.Normal
+            });
+            block.Inlines.Add(new Run($" {line.Unit}"));
+        }
+    }
+
+    private string FormatResultValue(ResultLine line)
+    {
+        return line.Unit == "deg"
+            ? FormatAngle(line.Value)
+            : FormatStress(line.Value);
+    }
+
+    private SolidColorBrush ResultBrush(ResultLine line)
+    {
+        return IsAllowableExceeded(line)
+            ? Brush("#C2410C")
+            : Brush("#172033");
+    }
+
+    private bool IsAllowableExceeded(ResultLine line)
+    {
+        return line.CheckAllowable && Math.Abs(line.Value) > AllowableStressLimit;
+    }
+
     private static void AddArrowHead(Canvas canvas, Point tip, Vector direction, string color, double opacity = 1.0)
     {
         if (direction.Length <= double.Epsilon)
@@ -1362,7 +1637,12 @@ public partial class MainWindow : Window
 
     private string FormatAngle(double value)
     {
-        return value.ToString("0.###", _culture);
+        return value.ToString("0.##", _culture);
+    }
+
+    private string FormatRotation(double value)
+    {
+        return value.ToString("0.##", _culture);
     }
 
     private string FormatStress(double valueGPa)
@@ -1497,6 +1777,17 @@ public partial class MainWindow : Window
         return Math.Clamp(value, -StressLimit, StressLimit);
     }
 
+    private static double ClampRotation(double value, bool snapToZero)
+    {
+        double clamped = Math.Clamp(value, -180.0, 180.0);
+        if (snapToZero && Math.Abs(clamped) <= RotationSnapToZeroToleranceDegrees)
+        {
+            return 0.0;
+        }
+
+        return Math.Round(clamped, 2);
+    }
+
     private static double ClampTauMagnitude(double value)
     {
         return Math.Clamp(Math.Abs(value), 0.0, StressLimit);
@@ -1529,7 +1820,7 @@ public partial class MainWindow : Window
             degrees += 360.0;
         }
 
-        return Math.Round(degrees, 3);
+        return Math.Round(degrees, 2);
     }
 
     private static double NormalizeDegreesWithSnap(double degrees)
@@ -1565,6 +1856,17 @@ public partial class MainWindow : Window
         if (degrees < 0)
         {
             degrees += 360.0;
+        }
+
+        return degrees;
+    }
+
+    private static double NormalizeSignedDegrees(double degrees)
+    {
+        degrees = NormalizeCircleDegrees(degrees);
+        if (degrees > 180.0)
+        {
+            degrees -= 360.0;
         }
 
         return degrees;
